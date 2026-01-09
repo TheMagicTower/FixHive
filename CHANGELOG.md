@@ -8,6 +8,23 @@
 
 ---
 
+## [0.1.4] - 2026-01-09
+
+### Added (추가)
+- **테스트 스위트** (151개 테스트, Vitest 기반)
+  - Core 모듈 테스트 (privacy-filter, hash, error-detector)
+  - Storage 모듈 테스트 (local-store)
+  - Cloud 모듈 테스트 (embedding, client)
+  - 테스트 커버리지: Core 99%, Storage 98%, Cloud 96%
+- **CI/CD 파이프라인** (GitHub Actions)
+  - Node.js 18.x, 20.x, 22.x 매트릭스 테스트
+  - 자동 빌드 및 타입 체크
+  - 테스트 커버리지 리포트 업로드
+  - 자동 npm 배포 (태그 푸시 시)
+  - Dependabot 자동 의존성 업데이트
+
+---
+
 ## [0.1.1] - 2026-01-09
 
 ### Security (보안)
