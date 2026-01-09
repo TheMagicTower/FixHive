@@ -15,7 +15,7 @@ FixHive is an OpenCode plugin that automatically captures errors during developm
 ## Installation
 
 ```bash
-npm install @fixhive/opencode-plugin
+npm install @the-magic-tower/fixhive-opencode-plugin
 ```
 
 ## Configuration
@@ -38,12 +38,14 @@ FIXHIVE_CONTRIBUTOR_ID=your-contributor-id
 
 ### As OpenCode Plugin
 
-Add to your OpenCode configuration:
+Add to your OpenCode configuration (`opencode.config.ts`):
 
 ```typescript
-import FixHivePlugin from '@fixhive/opencode-plugin';
+import FixHivePlugin from '@the-magic-tower/fixhive-opencode-plugin';
 
-export default FixHivePlugin;
+export default {
+  plugins: [FixHivePlugin],
+};
 ```
 
 ### Available Commands
