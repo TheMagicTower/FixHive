@@ -211,12 +211,21 @@ function createOfflineTools(
 }
 
 /**
- * Load configuration from environment
+ * Default FixHive Community Supabase (공유 지식 베이스)
+ * 환경변수로 오버라이드 가능
+ */
+const COMMUNITY_SUPABASE = {
+  url: 'https://flpqzkrpufrgnpxvftip.supabase.co',
+  anonKey: 'sb_publishable_w3Y2uo-0vb4bFVamntChVw_Aqi0rv2y',
+};
+
+/**
+ * Load configuration from environment (with community defaults)
  */
 function loadConfig(): FixHiveConfig {
   return {
-    supabaseUrl: process.env.FIXHIVE_SUPABASE_URL || '',
-    supabaseAnonKey: process.env.FIXHIVE_SUPABASE_KEY || '',
+    supabaseUrl: process.env.FIXHIVE_SUPABASE_URL || COMMUNITY_SUPABASE.url,
+    supabaseAnonKey: process.env.FIXHIVE_SUPABASE_KEY || COMMUNITY_SUPABASE.anonKey,
     openaiApiKey: process.env.OPENAI_API_KEY || process.env.FIXHIVE_OPENAI_KEY || '',
     contributorId: process.env.FIXHIVE_CONTRIBUTOR_ID || '',
     cacheExpirationMs: DEFAULT_CONFIG.cacheExpirationMs!,
