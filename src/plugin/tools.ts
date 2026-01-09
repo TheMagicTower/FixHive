@@ -11,13 +11,14 @@ import type { FixHiveContext, CloudKnowledgeEntry, LocalErrorRecord } from '../t
 
 /**
  * Create FixHive tools for OpenCode plugin
+ * @returns Record of tool definitions
  */
 export function createTools(
   localStore: LocalStore,
   cloudClient: CloudClient,
   privacyFilter: PrivacyFilter,
   context: FixHiveContext
-) {
+): Record<string, ReturnType<typeof tool>> {
   return {
     /**
      * Search cloud knowledge base for error solutions
