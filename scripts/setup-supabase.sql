@@ -308,6 +308,226 @@ CREATE TRIGGER knowledge_entries_updated_at
 -- INSERT INTO knowledge_entries (...) VALUES (...);
 
 -- ===========================================
+-- Security: Vote Records Table (중복 투표 방지)
+-- ===========================================
+
+CREATE TABLE IF NOT EXISTS vote_records (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    knowledge_id UUID REFERENCES knowledge_entries(id) ON DELETE CASCADE,
+    user_hash TEXT NOT NULL,
+    vote_type TEXT NOT NULL CHECK (vote_type IN ('up', 'down')),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(knowledge_id, user_hash)
+);
+
+CREATE INDEX IF NOT EXISTS idx_vote_knowledge ON vote_records(knowledge_id);
+CREATE INDEX IF NOT EXISTS idx_vote_user ON vote_records(user_hash);
+
+ALTER TABLE vote_records ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Vote records are viewable by everyone"
+ON vote_records FOR SELECT USING (true);
+
+CREATE POLICY "Anyone can insert vote records"
+ON vote_records FOR INSERT WITH CHECK (true);
+
+-- ===========================================
+-- Security: Rate Limiting Function
+-- ===========================================
+
+CREATE OR REPLACE FUNCTION check_insert_rate_limit(p_contributor_id TEXT)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    hourly_count INTEGER;
+    daily_count INTEGER;
+BEGIN
+    -- 시간당 10개 제한
+    SELECT COUNT(*) INTO hourly_count
+    FROM knowledge_entries
+    WHERE contributor_id = p_contributor_id
+      AND created_at > NOW() - INTERVAL '1 hour';
+
+    IF hourly_count >= 10 THEN
+        RETURN FALSE;
+    END IF;
+
+    -- 일일 50개 제한
+    SELECT COUNT(*) INTO daily_count
+    FROM knowledge_entries
+    WHERE contributor_id = p_contributor_id
+      AND created_at > NOW() - INTERVAL '1 day';
+
+    IF daily_count >= 50 THEN
+        RETURN FALSE;
+    END IF;
+
+    RETURN TRUE;
+END;
+$$;
+
+-- 기존 정책 삭제 후 Rate Limited 정책 적용
+DROP POLICY IF EXISTS "Anyone can insert knowledge" ON knowledge_entries;
+
+CREATE POLICY "Rate limited knowledge inserts"
+ON knowledge_entries FOR INSERT
+WITH CHECK (check_insert_rate_limit(contributor_id));
+
+-- ===========================================
+-- Security: Input Validation Trigger
+-- ===========================================
+
+CREATE OR REPLACE FUNCTION validate_knowledge_entry()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    -- 필수 필드 검증
+    IF NEW.error_message IS NULL OR trim(NEW.error_message) = '' THEN
+        RAISE EXCEPTION 'error_message is required';
+    END IF;
+
+    IF NEW.resolution_description IS NULL OR trim(NEW.resolution_description) = '' THEN
+        RAISE EXCEPTION 'resolution_description is required';
+    END IF;
+
+    IF NEW.contributor_id IS NULL OR trim(NEW.contributor_id) = '' THEN
+        RAISE EXCEPTION 'contributor_id is required';
+    END IF;
+
+    -- 길이 제한
+    IF length(NEW.error_message) > 5000 THEN
+        RAISE EXCEPTION 'error_message too long (max 5000 chars)';
+    END IF;
+
+    IF NEW.error_stack IS NOT NULL AND length(NEW.error_stack) > 10000 THEN
+        RAISE EXCEPTION 'error_stack too long (max 10000 chars)';
+    END IF;
+
+    IF length(NEW.resolution_description) > 10000 THEN
+        RAISE EXCEPTION 'resolution_description too long (max 10000 chars)';
+    END IF;
+
+    IF NEW.resolution_code IS NOT NULL AND length(NEW.resolution_code) > 20000 THEN
+        RAISE EXCEPTION 'resolution_code too long (max 20000 chars)';
+    END IF;
+
+    -- 악성 콘텐츠 패턴 차단
+    IF NEW.error_message ~* '<script|javascript:|data:text/html|onclick=|onerror=' THEN
+        RAISE EXCEPTION 'Potentially malicious content in error_message';
+    END IF;
+
+    IF NEW.resolution_description ~* '<script|javascript:|data:text/html|onclick=|onerror=' THEN
+        RAISE EXCEPTION 'Potentially malicious content in resolution_description';
+    END IF;
+
+    IF NEW.resolution_code IS NOT NULL AND
+       NEW.resolution_code ~* 'eval\s*\(|document\.write|innerHTML\s*=' THEN
+        -- 코드 필드는 좀 더 관대하게, 명백한 악성 패턴만 차단
+        RAISE EXCEPTION 'Potentially dangerous code pattern detected';
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS validate_knowledge_before_insert ON knowledge_entries;
+CREATE TRIGGER validate_knowledge_before_insert
+    BEFORE INSERT ON knowledge_entries
+    FOR EACH ROW
+    EXECUTE FUNCTION validate_knowledge_entry();
+
+-- ===========================================
+-- Security: Safe Vote Function (중복 방지)
+-- ===========================================
+
+CREATE OR REPLACE FUNCTION safe_vote(
+    p_entry_id UUID,
+    p_user_hash TEXT,
+    p_vote_type TEXT
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    existing_vote TEXT;
+BEGIN
+    -- 입력 검증
+    IF p_vote_type NOT IN ('up', 'down') THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Invalid vote type');
+    END IF;
+
+    -- 기존 투표 확인
+    SELECT vote_type INTO existing_vote
+    FROM vote_records
+    WHERE knowledge_id = p_entry_id AND user_hash = p_user_hash;
+
+    IF existing_vote IS NOT NULL THEN
+        IF existing_vote = p_vote_type THEN
+            RETURN jsonb_build_object('success', false, 'error', 'Already voted');
+        ELSE
+            -- 투표 변경: 기존 투표 취소 후 새 투표
+            UPDATE vote_records
+            SET vote_type = p_vote_type, created_at = NOW()
+            WHERE knowledge_id = p_entry_id AND user_hash = p_user_hash;
+
+            IF p_vote_type = 'up' THEN
+                UPDATE knowledge_entries
+                SET upvotes = upvotes + 1, downvotes = GREATEST(downvotes - 1, 0)
+                WHERE id = p_entry_id;
+            ELSE
+                UPDATE knowledge_entries
+                SET downvotes = downvotes + 1, upvotes = GREATEST(upvotes - 1, 0)
+                WHERE id = p_entry_id;
+            END IF;
+
+            RETURN jsonb_build_object('success', true, 'action', 'changed');
+        END IF;
+    END IF;
+
+    -- 새 투표 기록
+    INSERT INTO vote_records (knowledge_id, user_hash, vote_type)
+    VALUES (p_entry_id, p_user_hash, p_vote_type);
+
+    -- 카운트 업데이트
+    IF p_vote_type = 'up' THEN
+        UPDATE knowledge_entries SET upvotes = upvotes + 1 WHERE id = p_entry_id;
+    ELSE
+        UPDATE knowledge_entries SET downvotes = downvotes + 1 WHERE id = p_entry_id;
+    END IF;
+
+    RETURN jsonb_build_object('success', true, 'action', 'voted');
+END;
+$$;
+
+-- ===========================================
+-- Security: Report Function
+-- ===========================================
+
+CREATE OR REPLACE FUNCTION report_entry(
+    p_entry_id UUID,
+    p_user_hash TEXT,
+    p_reason TEXT DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    -- 신고 횟수 증가
+    UPDATE knowledge_entries
+    SET report_count = report_count + 1
+    WHERE id = p_entry_id;
+
+    -- 로그 기록
+    INSERT INTO usage_logs (knowledge_id, action, user_hash)
+    VALUES (p_entry_id, 'report', p_user_hash);
+
+    RETURN jsonb_build_object('success', true);
+END;
+$$;
+
+-- ===========================================
 -- Grants for anon role (Supabase anonymous access)
 -- ===========================================
 
@@ -315,7 +535,12 @@ GRANT SELECT ON knowledge_entries TO anon;
 GRANT INSERT ON knowledge_entries TO anon;
 GRANT SELECT ON usage_logs TO anon;
 GRANT INSERT ON usage_logs TO anon;
+GRANT SELECT ON vote_records TO anon;
+GRANT INSERT ON vote_records TO anon;
 GRANT EXECUTE ON FUNCTION search_similar_errors TO anon;
 GRANT EXECUTE ON FUNCTION check_duplicate_entry TO anon;
 GRANT EXECUTE ON FUNCTION increment_vote TO anon;
 GRANT EXECUTE ON FUNCTION increment_usage_count TO anon;
+GRANT EXECUTE ON FUNCTION check_insert_rate_limit TO anon;
+GRANT EXECUTE ON FUNCTION safe_vote TO anon;
+GRANT EXECUTE ON FUNCTION report_entry TO anon;

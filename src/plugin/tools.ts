@@ -165,10 +165,42 @@ export function createTools(
           .describe('True for upvote, false for downvote'),
       },
       async execute(args) {
-        await cloudClient.vote(args.knowledgeId, args.helpful);
+        const result = await cloudClient.vote(args.knowledgeId, args.helpful);
+
+        if (!result.success) {
+          if (result.error === 'Already voted') {
+            return 'You have already voted on this solution.';
+          }
+          return `Vote failed: ${result.error}`;
+        }
+
         return args.helpful
           ? 'Thanks for the feedback! Solution upvoted.'
           : 'Thanks for the feedback! Solution downvoted.';
+      },
+    }),
+
+    /**
+     * Report inappropriate content
+     */
+    fixhive_report: tool({
+      description:
+        'Report a FixHive solution for inappropriate content, spam, or incorrect information.',
+      args: {
+        knowledgeId: tool.schema.string().describe('Knowledge entry ID to report'),
+        reason: tool.schema
+          .string()
+          .optional()
+          .describe('Reason for reporting (spam, incorrect, inappropriate, etc.)'),
+      },
+      async execute(args) {
+        const result = await cloudClient.reportEntry(args.knowledgeId, args.reason);
+
+        if (!result.success) {
+          return 'Failed to submit report. Please try again later.';
+        }
+
+        return 'Report submitted. Thank you for helping keep FixHive clean!';
       },
     }),
 

@@ -222,22 +222,50 @@ export class CloudClient {
   }
 
   /**
-   * Vote on a knowledge entry
+   * Vote on a knowledge entry (with duplicate vote prevention)
    */
-  async vote(knowledgeId: string, helpful: boolean): Promise<void> {
-    const column = helpful ? 'upvotes' : 'downvotes';
+  async vote(knowledgeId: string, helpful: boolean): Promise<{ success: boolean; error?: string }> {
+    const voteType = helpful ? 'up' : 'down';
 
-    await this.supabase.rpc('increment_vote', {
-      entry_id: knowledgeId,
-      vote_type: column,
+    const { data, error } = await this.supabase.rpc('safe_vote', {
+      p_entry_id: knowledgeId,
+      p_user_hash: this.contributorId,
+      p_vote_type: voteType,
     });
 
-    // Log usage
-    await this.supabase.from('usage_logs').insert({
-      knowledge_id: knowledgeId,
-      action: helpful ? 'upvote' : 'downvote',
-      user_hash: this.contributorId,
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    const result = data as { success: boolean; error?: string; action?: string };
+
+    // Log usage only on successful new vote
+    if (result.success) {
+      await this.supabase.from('usage_logs').insert({
+        knowledge_id: knowledgeId,
+        action: helpful ? 'upvote' : 'downvote',
+        user_hash: this.contributorId,
+      });
+    }
+
+    return result;
+  }
+
+  /**
+   * Report an entry for review
+   */
+  async reportEntry(knowledgeId: string, reason?: string): Promise<{ success: boolean }> {
+    const { data, error } = await this.supabase.rpc('report_entry', {
+      p_entry_id: knowledgeId,
+      p_user_hash: this.contributorId,
+      p_reason: reason || null,
     });
+
+    if (error) {
+      return { success: false };
+    }
+
+    return data as { success: boolean };
   }
 
   /**
