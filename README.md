@@ -29,25 +29,7 @@ FixHive is an OpenCode plugin that automatically captures errors during developm
 npm install @the-magic-tower/fixhive-opencode-plugin
 ```
 
-## Configuration
-
-Set the following environment variables:
-
-```bash
-# Required for cloud features
-FIXHIVE_SUPABASE_URL=https://your-project.supabase.co
-FIXHIVE_SUPABASE_KEY=your-anon-key
-
-# Optional: For embedding-based semantic search
-OPENAI_API_KEY=sk-...
-
-# Optional: Custom contributor ID (auto-generated if not set)
-FIXHIVE_CONTRIBUTOR_ID=your-contributor-id
-```
-
-## Usage
-
-### As OpenCode Plugin
+## Quick Start
 
 Add to your OpenCode configuration (`opencode.config.ts`):
 
@@ -59,7 +41,32 @@ export default {
 };
 ```
 
-### Available Commands
+**That's it!** FixHive connects to the community knowledge base by default. No environment variables required.
+
+## Configuration (Optional)
+
+Environment variables to customize behavior:
+
+```bash
+# Use your own Supabase instance instead of community
+FIXHIVE_SUPABASE_URL=https://your-project.supabase.co
+FIXHIVE_SUPABASE_KEY=your-anon-key
+
+# Enable semantic search (recommended)
+OPENAI_API_KEY=sk-...
+
+# Custom contributor ID (auto-generated if not set)
+FIXHIVE_CONTRIBUTOR_ID=your-contributor-id
+```
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `FIXHIVE_SUPABASE_URL` | Community DB | Your Supabase project URL |
+| `FIXHIVE_SUPABASE_KEY` | Community Key | Your Supabase anon key |
+| `OPENAI_API_KEY` | None | Enables semantic similarity search |
+| `FIXHIVE_CONTRIBUTOR_ID` | Auto-generated | Your unique contributor ID |
+
+## Available Commands
 
 | Command | Description |
 |---------|-------------|
@@ -69,6 +76,7 @@ export default {
 | `fixhive_vote` | Upvote/downvote a solution |
 | `fixhive_stats` | View usage statistics |
 | `fixhive_helpful` | Report a solution was helpful |
+| `fixhive_report` | Report inappropriate content |
 
 ### Example Workflow
 
@@ -77,9 +85,13 @@ export default {
 3. **Apply fix** → Follow community solution
 4. **Share resolution** → `fixhive_resolve <error-id> "Installed missing dependency"`
 
-## Cloud Setup (Supabase)
+## Self-Hosted Setup (Optional)
 
-1. Create a new Supabase project
+Skip this section if you're using the default community knowledge base.
+
+To run your own FixHive backend:
+
+1. Create a new Supabase project (Free tier works)
 2. Run the setup script in SQL Editor:
 
 ```bash
@@ -88,6 +100,12 @@ cat scripts/setup-supabase.sql | pbcopy
 ```
 
 3. Get your project URL and anon key from Settings > API
+4. Set environment variables:
+
+```bash
+FIXHIVE_SUPABASE_URL=https://your-project.supabase.co
+FIXHIVE_SUPABASE_KEY=your-anon-key
+```
 
 ## Architecture
 

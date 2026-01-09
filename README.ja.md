@@ -29,25 +29,7 @@ FixHiveは、開発セッション中にエラーを自動的にキャプチャ�
 npm install @the-magic-tower/fixhive-opencode-plugin
 ```
 
-## 設定
-
-以下の環境変数を設定してください：
-
-```bash
-# クラウド機能に必須
-FIXHIVE_SUPABASE_URL=https://your-project.supabase.co
-FIXHIVE_SUPABASE_KEY=your-anon-key
-
-# オプション：埋め込みベースのセマンティック検索用
-OPENAI_API_KEY=sk-...
-
-# オプション：カスタム貢献者ID（未設定の場合は自動生成）
-FIXHIVE_CONTRIBUTOR_ID=your-contributor-id
-```
-
-## 使用方法
-
-### OpenCodeプラグインとして
+## クイックスタート
 
 OpenCode設定ファイル（`opencode.config.ts`）に追加：
 
@@ -59,7 +41,32 @@ export default {
 };
 ```
 
-### 利用可能なコマンド
+**以上！** FixHiveはデフォルトでコミュニティナレッジベースに接続します。環境変数の設定は不要です。
+
+## 設定（オプション）
+
+動作をカスタマイズするための環境変数：
+
+```bash
+# コミュニティの代わりに自分のSupabaseインスタンスを使用
+FIXHIVE_SUPABASE_URL=https://your-project.supabase.co
+FIXHIVE_SUPABASE_KEY=your-anon-key
+
+# セマンティック検索を有効化（推奨）
+OPENAI_API_KEY=sk-...
+
+# カスタム貢献者ID（未設定の場合は自動生成）
+FIXHIVE_CONTRIBUTOR_ID=your-contributor-id
+```
+
+| 変数 | デフォルト | 説明 |
+|------|------------|------|
+| `FIXHIVE_SUPABASE_URL` | コミュニティDB | SupabaseプロジェクトURL |
+| `FIXHIVE_SUPABASE_KEY` | コミュニティKey | Supabase anonキー |
+| `OPENAI_API_KEY` | なし | セマンティック類似性検索を有効化 |
+| `FIXHIVE_CONTRIBUTOR_ID` | 自動生成 | 一意の貢献者ID |
+
+## 利用可能なコマンド
 
 | コマンド | 説明 |
 |----------|------|
@@ -69,6 +76,7 @@ export default {
 | `fixhive_vote` | ソリューションに投票（賛成/反対） |
 | `fixhive_stats` | 使用統計を表示 |
 | `fixhive_helpful` | ソリューションが役立ったことを報告 |
+| `fixhive_report` | 不適切なコンテンツを報告 |
 
 ### ワークフロー例
 
@@ -77,9 +85,13 @@ export default {
 3. **修正を適用** → コミュニティソリューションに従う
 4. **解決を共有** → `fixhive_resolve <error-id> "不足している依存関係をインストール"`
 
-## クラウドセットアップ（Supabase）
+## セルフホストセットアップ（オプション）
 
-1. 新しいSupabaseプロジェクトを作成
+デフォルトのコミュニティナレッジベースを使用する場合は、このセクションをスキップしてください。
+
+独自のFixHiveバックエンドを運用するには：
+
+1. 新しいSupabaseプロジェクトを作成（無料プランで可）
 2. SQLエディタでセットアップスクリプトを実行：
 
 ```bash
@@ -88,6 +100,12 @@ cat scripts/setup-supabase.sql | pbcopy
 ```
 
 3. Settings > APIからプロジェクトURLとanon keyを取得
+4. 環境変数を設定：
+
+```bash
+FIXHIVE_SUPABASE_URL=https://your-project.supabase.co
+FIXHIVE_SUPABASE_KEY=your-anon-key
+```
 
 ## アーキテクチャ
 

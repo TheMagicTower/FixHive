@@ -29,25 +29,7 @@ FixHive는 개발 세션 중 발생하는 오류를 자동으로 캡처하고, �
 npm install @the-magic-tower/fixhive-opencode-plugin
 ```
 
-## 설정
-
-다음 환경 변수를 설정하세요:
-
-```bash
-# 클라우드 기능 필수
-FIXHIVE_SUPABASE_URL=https://your-project.supabase.co
-FIXHIVE_SUPABASE_KEY=your-anon-key
-
-# 선택: 임베딩 기반 시맨틱 검색용
-OPENAI_API_KEY=sk-...
-
-# 선택: 사용자 정의 기여자 ID (미설정시 자동 생성)
-FIXHIVE_CONTRIBUTOR_ID=your-contributor-id
-```
-
-## 사용법
-
-### OpenCode 플러그인으로 사용
+## 빠른 시작
 
 OpenCode 설정 파일(`opencode.config.ts`)에 추가:
 
@@ -59,7 +41,32 @@ export default {
 };
 ```
 
-### 사용 가능한 명령어
+**끝!** FixHive는 기본적으로 커뮤니티 지식 베이스에 연결됩니다. 환경 변수 설정이 필요 없습니다.
+
+## 설정 (선택사항)
+
+동작을 커스터마이즈하기 위한 환경 변수:
+
+```bash
+# 커뮤니티 대신 자체 Supabase 인스턴스 사용
+FIXHIVE_SUPABASE_URL=https://your-project.supabase.co
+FIXHIVE_SUPABASE_KEY=your-anon-key
+
+# 시맨틱 검색 활성화 (권장)
+OPENAI_API_KEY=sk-...
+
+# 사용자 지정 기여자 ID (미설정 시 자동 생성)
+FIXHIVE_CONTRIBUTOR_ID=your-contributor-id
+```
+
+| 변수 | 기본값 | 설명 |
+|------|--------|------|
+| `FIXHIVE_SUPABASE_URL` | 커뮤니티 DB | Supabase 프로젝트 URL |
+| `FIXHIVE_SUPABASE_KEY` | 커뮤니티 Key | Supabase anon 키 |
+| `OPENAI_API_KEY` | 없음 | 시맨틱 유사도 검색 활성화 |
+| `FIXHIVE_CONTRIBUTOR_ID` | 자동 생성 | 고유 기여자 ID |
+
+## 사용 가능한 명령어
 
 | 명령어 | 설명 |
 |--------|------|
@@ -69,6 +76,7 @@ export default {
 | `fixhive_vote` | 솔루션 추천/비추천 |
 | `fixhive_stats` | 사용 통계 조회 |
 | `fixhive_helpful` | 솔루션이 도움됐음을 보고 |
+| `fixhive_report` | 부적절한 콘텐츠 신고 |
 
 ### 사용 예시 워크플로우
 
@@ -77,9 +85,13 @@ export default {
 3. **수정 적용** → 커뮤니티 솔루션 따라하기
 4. **해결 공유** → `fixhive_resolve <error-id> "누락된 의존성 설치"`
 
-## 클라우드 설정 (Supabase)
+## 자체 호스팅 설정 (선택사항)
 
-1. 새 Supabase 프로젝트 생성
+기본 커뮤니티 지식 베이스를 사용하는 경우 이 섹션을 건너뛰세요.
+
+자체 FixHive 백엔드를 운영하려면:
+
+1. 새 Supabase 프로젝트 생성 (무료 플랜 가능)
 2. SQL 에디터에서 설정 스크립트 실행:
 
 ```bash
@@ -88,6 +100,12 @@ cat scripts/setup-supabase.sql | pbcopy
 ```
 
 3. Settings > API에서 프로젝트 URL과 anon key 획득
+4. 환경 변수 설정:
+
+```bash
+FIXHIVE_SUPABASE_URL=https://your-project.supabase.co
+FIXHIVE_SUPABASE_KEY=your-anon-key
+```
 
 ## 아키텍처
 

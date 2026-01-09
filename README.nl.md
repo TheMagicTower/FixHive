@@ -29,25 +29,7 @@ FixHive is een OpenCode-plugin die automatisch fouten vastlegt tijdens ontwikkel
 npm install @the-magic-tower/fixhive-opencode-plugin
 ```
 
-## Configuratie
-
-Stel de volgende omgevingsvariabelen in:
-
-```bash
-# Vereist voor cloudfuncties
-FIXHIVE_SUPABASE_URL=https://your-project.supabase.co
-FIXHIVE_SUPABASE_KEY=your-anon-key
-
-# Optioneel: Voor embedding-gebaseerd semantisch zoeken
-OPENAI_API_KEY=sk-...
-
-# Optioneel: Aangepaste bijdrager-ID (automatisch gegenereerd indien niet ingesteld)
-FIXHIVE_CONTRIBUTOR_ID=your-contributor-id
-```
-
-## Gebruik
-
-### Als OpenCode Plugin
+## Snelstart
 
 Voeg toe aan uw OpenCode-configuratie (`opencode.config.ts`):
 
@@ -59,7 +41,32 @@ export default {
 };
 ```
 
-### Beschikbare Commando's
+**Dat is alles!** FixHive maakt standaard verbinding met de community-kennisbank. Geen omgevingsvariabelen vereist.
+
+## Configuratie (Optioneel)
+
+Omgevingsvariabelen om gedrag aan te passen:
+
+```bash
+# Gebruik uw eigen Supabase-instantie in plaats van community
+FIXHIVE_SUPABASE_URL=https://your-project.supabase.co
+FIXHIVE_SUPABASE_KEY=your-anon-key
+
+# Schakel semantisch zoeken in (aanbevolen)
+OPENAI_API_KEY=sk-...
+
+# Aangepaste bijdrager-ID (automatisch gegenereerd indien niet ingesteld)
+FIXHIVE_CONTRIBUTOR_ID=your-contributor-id
+```
+
+| Variabele | Standaard | Beschrijving |
+|-----------|-----------|--------------|
+| `FIXHIVE_SUPABASE_URL` | Community DB | Supabase project-URL |
+| `FIXHIVE_SUPABASE_KEY` | Community Key | Supabase anon-sleutel |
+| `OPENAI_API_KEY` | Geen | Schakelt semantische gelijkeniszoekopdracht in |
+| `FIXHIVE_CONTRIBUTOR_ID` | Auto-gegenereerd | Unieke bijdrager-ID |
+
+## Beschikbare Commando's
 
 | Commando | Beschrijving |
 |----------|--------------|
@@ -69,6 +76,7 @@ export default {
 | `fixhive_vote` | Stem voor/tegen een oplossing |
 | `fixhive_stats` | Bekijk gebruiksstatistieken |
 | `fixhive_helpful` | Meld dat een oplossing nuttig was |
+| `fixhive_report` | Meld ongepaste inhoud |
 
 ### Voorbeeld Workflow
 
@@ -77,9 +85,13 @@ export default {
 3. **Pas fix toe** → Volg de community-oplossing
 4. **Deel oplossing** → `fixhive_resolve <error-id> "Ontbrekende dependency geïnstalleerd"`
 
-## Cloud Setup (Supabase)
+## Self-Hosted Setup (Optioneel)
 
-1. Maak een nieuw Supabase-project aan
+Sla deze sectie over als u de standaard community-kennisbank gebruikt.
+
+Om uw eigen FixHive-backend te draaien:
+
+1. Maak een nieuw Supabase-project aan (gratis tier werkt)
 2. Voer het setup-script uit in de SQL-editor:
 
 ```bash
@@ -87,7 +99,13 @@ cat scripts/setup-supabase.sql | pbcopy
 # Plak in Supabase SQL-editor
 ```
 
-3. Haal uw project-URL en anon-sleutel op via Settings > API
+3. Haal project-URL en anon-sleutel op via Settings > API
+4. Stel omgevingsvariabelen in:
+
+```bash
+FIXHIVE_SUPABASE_URL=https://your-project.supabase.co
+FIXHIVE_SUPABASE_KEY=your-anon-key
+```
 
 ## Architectuur
 

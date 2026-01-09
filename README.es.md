@@ -29,25 +29,7 @@ FixHive es un plugin de OpenCode que captura automáticamente errores durante la
 npm install @the-magic-tower/fixhive-opencode-plugin
 ```
 
-## Configuración
-
-Configure las siguientes variables de entorno:
-
-```bash
-# Requerido para funciones en la nube
-FIXHIVE_SUPABASE_URL=https://your-project.supabase.co
-FIXHIVE_SUPABASE_KEY=your-anon-key
-
-# Opcional: Para búsqueda semántica basada en embeddings
-OPENAI_API_KEY=sk-...
-
-# Opcional: ID de contribuidor personalizado (se genera automáticamente si no se establece)
-FIXHIVE_CONTRIBUTOR_ID=your-contributor-id
-```
-
-## Uso
-
-### Como Plugin de OpenCode
+## Inicio Rápido
 
 Agregue a su configuración de OpenCode (`opencode.config.ts`):
 
@@ -59,7 +41,32 @@ export default {
 };
 ```
 
-### Comandos Disponibles
+**¡Eso es todo!** FixHive se conecta a la base de conocimientos de la comunidad por defecto. No se requieren variables de entorno.
+
+## Configuración (Opcional)
+
+Variables de entorno para personalizar el comportamiento:
+
+```bash
+# Use su propia instancia de Supabase en lugar de la comunidad
+FIXHIVE_SUPABASE_URL=https://your-project.supabase.co
+FIXHIVE_SUPABASE_KEY=your-anon-key
+
+# Habilitar búsqueda semántica (recomendado)
+OPENAI_API_KEY=sk-...
+
+# ID de contribuidor personalizado (se genera automáticamente si no se establece)
+FIXHIVE_CONTRIBUTOR_ID=your-contributor-id
+```
+
+| Variable | Por Defecto | Descripción |
+|----------|-------------|-------------|
+| `FIXHIVE_SUPABASE_URL` | DB Comunidad | URL del proyecto Supabase |
+| `FIXHIVE_SUPABASE_KEY` | Key Comunidad | Clave anon de Supabase |
+| `OPENAI_API_KEY` | Ninguna | Habilita búsqueda de similitud semántica |
+| `FIXHIVE_CONTRIBUTOR_ID` | Auto-generado | ID único de contribuidor |
+
+## Comandos Disponibles
 
 | Comando | Descripción |
 |---------|-------------|
@@ -69,6 +76,7 @@ export default {
 | `fixhive_vote` | Votar a favor/en contra de una solución |
 | `fixhive_stats` | Ver estadísticas de uso |
 | `fixhive_helpful` | Reportar que una solución fue útil |
+| `fixhive_report` | Reportar contenido inapropiado |
 
 ### Flujo de Trabajo de Ejemplo
 
@@ -77,9 +85,13 @@ export default {
 3. **Aplicar corrección** → Seguir la solución de la comunidad
 4. **Compartir resolución** → `fixhive_resolve <error-id> "Instalada dependencia faltante"`
 
-## Configuración en la Nube (Supabase)
+## Configuración Auto-Alojada (Opcional)
 
-1. Crear un nuevo proyecto de Supabase
+Omita esta sección si usa la base de conocimientos de la comunidad por defecto.
+
+Para ejecutar su propio backend de FixHive:
+
+1. Crear un nuevo proyecto de Supabase (el plan gratuito funciona)
 2. Ejecutar el script de configuración en el Editor SQL:
 
 ```bash
@@ -88,6 +100,12 @@ cat scripts/setup-supabase.sql | pbcopy
 ```
 
 3. Obtener la URL del proyecto y la clave anon desde Settings > API
+4. Configurar variables de entorno:
+
+```bash
+FIXHIVE_SUPABASE_URL=https://your-project.supabase.co
+FIXHIVE_SUPABASE_KEY=your-anon-key
+```
 
 ## Arquitectura
 
