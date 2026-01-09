@@ -12,7 +12,6 @@ import type {
   UploadResponse,
   DuplicateCheckResult,
   ContributorStats,
-  LocalErrorRecord,
 } from '../types/index.js';
 import { EmbeddingService } from './embedding.js';
 import { generateContributorId } from '../core/hash.js';

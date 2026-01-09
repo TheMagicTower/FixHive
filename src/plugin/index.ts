@@ -75,33 +75,40 @@ export const FixHivePlugin: Plugin = async (ctx) => {
       });
 
       if (detection.detected && detection.confidence >= 0.5) {
-        // Store error locally
-        const errorRecord = localStore.createErrorRecord({
+        // Sanitize error data before storing locally
+        const sanitizedErrorMessage = privacyFilter.sanitize(detection.errorMessage, filterContext).sanitized;
+        const sanitizedErrorStack = detection.errorStack
+          ? privacyFilter.sanitize(detection.errorStack, filterContext).sanitized
+          : undefined;
+
+        // Store error locally (with sanitized data)
+        localStore.createErrorRecord({
           errorType: detection.errorType,
-          errorMessage: detection.errorMessage,
-          errorStack: detection.errorStack,
+          errorMessage: sanitizedErrorMessage,
+          errorStack: sanitizedErrorStack,
           language: pluginContext.language,
           framework: pluginContext.framework,
           toolName: input.tool,
-          toolInput: {},
+          toolInput: {}, // Tool input is intentionally omitted to avoid storing sensitive data
           sessionId: pluginContext.sessionId || input.sessionID,
         });
 
         // Query cloud for solutions if client available
         if (cloudClient) {
           try {
+            // Use already-sanitized error data for cloud query
             const solutions = await cloudClient.searchSimilar({
-              errorMessage: detection.errorMessage,
-              errorStack: detection.errorStack,
+              errorMessage: sanitizedErrorMessage,
+              errorStack: sanitizedErrorStack,
               language: pluginContext.language,
               framework: pluginContext.framework,
               limit: 3,
             });
 
             if (solutions.results.length > 0) {
-              // Cache results
+              // Cache results using sanitized fingerprint
               localStore.cacheResults(
-                generateErrorFingerprint(detection.errorMessage, detection.errorStack),
+                generateErrorFingerprint(sanitizedErrorMessage, sanitizedErrorStack),
                 solutions.results
               );
 
@@ -109,15 +116,17 @@ export const FixHivePlugin: Plugin = async (ctx) => {
               output.title = `${output.title} [FixHive: ${solutions.results.length} solution(s) found]`;
             }
           } catch (e) {
-            // Silently fail cloud queries
-            console.error('[FixHive] Cloud query failed:', e);
+            // Log error with context but avoid exposing sensitive details
+            const errorMessage = e instanceof Error ? e.message : 'Unknown error';
+            console.error(`[FixHive] Cloud query failed: ${errorMessage}`);
+            // Don't throw - gracefully degrade to offline mode
           }
         }
       }
     },
 
     // ============ Session Compaction Hook ============
-    'experimental.session.compacting': async (input, output) => {
+    'experimental.session.compacting': async (_input, output) => {
       const unresolvedErrors = localStore.getUnresolvedErrors(pluginContext.sessionId);
 
       if (unresolvedErrors.length > 0) {
@@ -149,7 +158,7 @@ Use \`fixhive_mark_resolved\` when errors are fixed to contribute solutions.
  */
 function createOfflineTools(
   localStore: LocalStore,
-  privacyFilter: PrivacyFilter,
+  _privacyFilter: PrivacyFilter,
   context: FixHiveContext
 ) {
   const { tool } = require('@opencode-ai/plugin');

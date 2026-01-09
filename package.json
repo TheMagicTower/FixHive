@@ -15,8 +15,9 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup src/index.ts --format esm --dts --clean",
-    "dev": "tsup src/index.ts --format esm --dts --watch",
+    "build": "tsup src/index.ts --format esm --clean",
+    "build:dts": "tsup src/index.ts --format esm --dts --clean",
+    "dev": "tsup src/index.ts --format esm --watch",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --ext .ts",
     "test": "vitest",
@@ -58,7 +59,8 @@
     "eslint": "^9.0.0",
     "tsup": "^8.2.0",
     "typescript": "^5.5.0",
-    "vitest": "^2.0.0"
+    "vitest": "^2.0.0",
+    "zod": "^4.3.5"
   },
   "engines": {
     "node": ">=20.0.0"

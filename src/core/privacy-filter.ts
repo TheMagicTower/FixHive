@@ -58,11 +58,11 @@ const DEFAULT_FILTER_RULES: PrivacyFilterRule[] = [
     priority: 100,
   },
 
-  // JWT Tokens
+  // JWT Tokens (limited length to prevent ReDoS)
   {
     name: 'jwt_token',
     category: 'secret',
-    pattern: /\beyJ[A-Za-z0-9_-]*\.eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*/g,
+    pattern: /\beyJ[A-Za-z0-9_-]{10,500}\.eyJ[A-Za-z0-9_-]{10,1000}\.[A-Za-z0-9_-]{10,500}/g,
     replacement: '[JWT_REDACTED]',
     priority: 100,
   },
@@ -86,20 +86,20 @@ const DEFAULT_FILTER_RULES: PrivacyFilterRule[] = [
     priority: 100,
   },
 
-  // Generic API Keys (context-based)
+  // Generic API Keys (context-based, limited length to prevent ReDoS)
   {
     name: 'generic_api_key',
     category: 'secret',
-    pattern: /\b(api[_-]?key|apikey|api[_-]?secret)\s*[=:]\s*["']?[\w\-]{20,}["']?/gi,
+    pattern: /\b(api[_-]?key|apikey|api[_-]?secret)\s{0,5}[=:]\s{0,5}["']?[\w-]{20,200}["']?/gi,
     replacement: '$1=[KEY_REDACTED]',
     priority: 95,
   },
 
-  // Secret/Password assignments
+  // Secret/Password assignments (limited length to prevent ReDoS)
   {
     name: 'secret_assignment',
     category: 'secret',
-    pattern: /\b(password|passwd|pwd|secret|token|credential)\s*[=:]\s*["']?[^\s"']{8,}["']?/gi,
+    pattern: /\b(password|passwd|pwd|secret|token|credential)\s{0,5}[=:]\s{0,5}["']?[^\s"']{8,200}["']?/gi,
     replacement: '$1=[REDACTED]',
     priority: 90,
   },
@@ -329,16 +329,20 @@ export class PrivacyFilter {
 
   /**
    * Check if content contains sensitive data
+   * Note: Always reset regex lastIndex BEFORE testing to prevent state pollution
    */
   containsSensitiveData(content: string): boolean {
     for (const rule of this.rules) {
-      if (rule.category === 'secret' && rule.pattern.test(content)) {
-        // Reset regex state
+      if (rule.category === 'secret') {
+        // Reset lastIndex BEFORE testing to ensure consistent behavior with global regex
         rule.pattern.lastIndex = 0;
-        return true;
+        const hasSensitiveData = rule.pattern.test(content);
+        // Reset again after test to clean up state
+        rule.pattern.lastIndex = 0;
+        if (hasSensitiveData) {
+          return true;
+        }
       }
-      // Reset regex state for global patterns
-      rule.pattern.lastIndex = 0;
     }
     return false;
   }

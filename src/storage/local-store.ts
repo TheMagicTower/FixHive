@@ -12,7 +12,6 @@ import type {
   ErrorStatus,
   LocalStats,
   CloudKnowledgeEntry,
-  QueryCacheEntry,
 } from '../types/index.js';
 import { generateErrorFingerprint } from '../core/hash.js';
 import { runMigrations } from './migrations.js';
@@ -262,9 +261,24 @@ export class LocalStore {
   }
 
   /**
+   * Allowed stat column names for incrementStat (whitelist to prevent SQL injection)
+   */
+  private static readonly ALLOWED_STATS = [
+    'total_errors',
+    'resolved_errors',
+    'uploaded_errors',
+    'queries_made',
+  ] as const;
+
+  /**
    * Increment a stat counter
+   * @throws Error if stat name is not in the allowed whitelist
    */
   private incrementStat(stat: string): void {
+    // Validate stat name against whitelist to prevent SQL injection
+    if (!LocalStore.ALLOWED_STATS.includes(stat as (typeof LocalStore.ALLOWED_STATS)[number])) {
+      throw new Error(`Invalid stat name: ${stat}. Allowed: ${LocalStore.ALLOWED_STATS.join(', ')}`);
+    }
     const stmt = this.db.prepare(`UPDATE usage_stats SET ${stat} = ${stat} + 1 WHERE id = 1`);
     stmt.run();
   }
