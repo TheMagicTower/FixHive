@@ -1,5 +1,5 @@
 {
-  "name": "@fixhive/opencode-plugin",
+  "name": "@the-magic-tower/fixhive-opencode-plugin",
   "version": "0.1.0",
   "description": "Community-based error knowledge sharing for OpenCode",
   "type": "module",
@@ -38,7 +38,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/seoulventures/fixhive.git"
+    "url": "https://github.com/TheMagicTower/FixHive.git"
   },
   "peerDependencies": {
     "@opencode-ai/plugin": "^1.1.1"
