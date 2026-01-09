@@ -1,0 +1,147 @@
+# FixHive
+
+<p align="center">
+  <a href="README.md">English</a> |
+  <a href="README.ko.md">한국어</a> |
+  <a href="README.zh.md">中文</a> |
+  <a href="README.ja.md">日本語</a> |
+  <a href="README.es.md">Español</a> |
+  <a href="README.de.md">Deutsch</a> |
+  <a href="README.fr.md">Français</a> |
+  <a href="README.nl.md">Nederlands</a>
+</p>
+
+> Community-gebaseerd Foutkennis Delen voor OpenCode
+
+FixHive is een OpenCode-plugin die automatisch fouten vastlegt tijdens ontwikkelsessies, een community-kennisbank raadpleegt voor oplossingen en opgeloste fouten deelt met andere ontwikkelaars.
+
+## Functies
+
+- **Automatische Foutdetectie**: Detecteert automatisch fouten uit tool-uitvoer (bash, edit, etc.)
+- **Cloud Kennisbank**: Zoek community-oplossingen met semantische gelijkenis (pgvector)
+- **Lokale Cache**: SQLite-gebaseerde lokale opslag voor offline toegang
+- **Privacy Filtering**: Verwijdert automatisch gevoelige gegevens (API-sleutels, paden, e-mails)
+- **Realtime Synchronisatie**: Directe cloudcommunicatie bij fout/oplossing
+
+## Installatie
+
+```bash
+npm install @the-magic-tower/fixhive-opencode-plugin
+```
+
+## Configuratie
+
+Stel de volgende omgevingsvariabelen in:
+
+```bash
+# Vereist voor cloudfuncties
+FIXHIVE_SUPABASE_URL=https://your-project.supabase.co
+FIXHIVE_SUPABASE_KEY=your-anon-key
+
+# Optioneel: Voor embedding-gebaseerd semantisch zoeken
+OPENAI_API_KEY=sk-...
+
+# Optioneel: Aangepaste bijdrager-ID (automatisch gegenereerd indien niet ingesteld)
+FIXHIVE_CONTRIBUTOR_ID=your-contributor-id
+```
+
+## Gebruik
+
+### Als OpenCode Plugin
+
+Voeg toe aan uw OpenCode-configuratie (`opencode.config.ts`):
+
+```typescript
+import FixHivePlugin from '@the-magic-tower/fixhive-opencode-plugin';
+
+export default {
+  plugins: [FixHivePlugin],
+};
+```
+
+### Beschikbare Commando's
+
+| Commando | Beschrijving |
+|----------|--------------|
+| `fixhive_search` | Zoek foutoplossingen in de kennisbank |
+| `fixhive_resolve` | Markeer fout als opgelost en deel oplossing |
+| `fixhive_list` | Lijst fouten in huidige sessie |
+| `fixhive_vote` | Stem voor/tegen een oplossing |
+| `fixhive_stats` | Bekijk gebruiksstatistieken |
+| `fixhive_helpful` | Meld dat een oplossing nuttig was |
+
+### Voorbeeld Workflow
+
+1. **Fout treedt op** → FixHive detecteert en registreert deze automatisch
+2. **Zoek oplossingen** → `fixhive_search "Module not found: react"`
+3. **Pas fix toe** → Volg de community-oplossing
+4. **Deel oplossing** → `fixhive_resolve <error-id> "Ontbrekende dependency geïnstalleerd"`
+
+## Cloud Setup (Supabase)
+
+1. Maak een nieuw Supabase-project aan
+2. Voer het setup-script uit in de SQL-editor:
+
+```bash
+cat scripts/setup-supabase.sql | pbcopy
+# Plak in Supabase SQL-editor
+```
+
+3. Haal uw project-URL en anon-sleutel op via Settings > API
+
+## Architectuur
+
+```
+FixHive Plugin
+├── Error Detection (tool.execute.after hook)
+├── Privacy Filter (verwijdert gevoelige gegevens)
+├── Local Storage (SQLite)
+│   ├── error_records
+│   └── query_cache
+└── Cloud Client (Supabase + pgvector)
+    ├── knowledge_entries
+    └── usage_logs
+```
+
+## Privacy
+
+FixHive filtert automatisch gevoelige informatie:
+
+- API-sleutels (OpenAI, GitHub, AWS, Stripe, etc.)
+- JWT-tokens en Bearer-tokens
+- E-mailadressen
+- Bestandspaden (vervangen door `~` of `<PROJECT>`)
+- Omgevingsvariabelen met gevoelige namen
+- Database-verbindingsstrings
+- IP-adressen (behalve localhost)
+
+## Ontwikkeling
+
+```bash
+# Installeer dependencies
+npm install
+
+# Bouwen
+npm run build
+
+# Watch-modus
+npm run dev
+
+# Type-controle
+npm run typecheck
+
+# Tests uitvoeren
+npm test
+```
+
+## Licentie
+
+MIT
+
+## Bijdragen
+
+1. Fork de repository
+2. Maak uw feature-branch aan
+3. Commit uw wijzigingen
+4. Push naar de branch
+5. Maak een Pull Request
