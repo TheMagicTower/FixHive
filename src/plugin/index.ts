@@ -30,6 +30,11 @@ export const FixHivePlugin: Plugin = async (ctx) => {
   // Load configuration from environment
   const config = loadConfig();
 
+  // Log plugin initialization
+  console.log('[FixHive] Plugin loaded');
+  console.log(`[FixHive] Project: ${ctx.directory}`);
+  console.log(`[FixHive] Cloud: ${config.supabaseUrl ? 'enabled' : 'disabled'}`);
+
   // Initialize components
   const privacyFilter = new PrivacyFilter();
   const filterContext = createFilterContext(ctx.directory);
@@ -55,6 +60,12 @@ export const FixHivePlugin: Plugin = async (ctx) => {
     language: detectLanguage(ctx.directory),
     framework: detectFramework(ctx.directory),
   };
+
+  // Log detected environment
+  if (pluginContext.language) {
+    console.log(`[FixHive] Detected: ${pluginContext.language}${pluginContext.framework ? ` / ${pluginContext.framework}` : ''}`);
+  }
+  console.log('[FixHive] Ready - use fixhive_stats to verify');
 
   // Error-producing tools to monitor
   const errorProducingTools = ['bash', 'edit', 'write', 'read', 'terminal'];
