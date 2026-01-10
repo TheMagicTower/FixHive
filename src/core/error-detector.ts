@@ -11,7 +11,7 @@ import type {
   StackTraceInfo,
   ToolOutput,
 } from '../types/index.js';
-import { PrivacyFilter } from './privacy-filter.js';
+import { createPrivacyFilter, type PrivacyFilter } from './privacy-filter.js';
 
 /**
  * Error keyword patterns by category
@@ -114,100 +114,30 @@ const EXIT_CODE_SEVERITY: Record<number, Severity> = {
 };
 
 /**
- * Error Detector Class
- * Analyzes tool outputs to detect errors
+ * ErrorDetector interface - defines all public methods
  */
-export class ErrorDetector {
-  private privacyFilter: PrivacyFilter;
+export interface ErrorDetector {
+  detect(toolOutput: ToolOutput): ErrorDetectionResult;
+}
 
-  constructor(privacyFilter?: PrivacyFilter) {
-    this.privacyFilter = privacyFilter || new PrivacyFilter();
-  }
-
-  /**
-   * Detect if output contains an error
-   */
-  detect(toolOutput: ToolOutput): ErrorDetectionResult {
-    const signals: DetectedSignal[] = [];
-    const combinedOutput = `${toolOutput.output || ''}\n${toolOutput.stderr || ''}`;
-
-    // Signal 1: Exit code
-    if (toolOutput.exitCode !== undefined && toolOutput.exitCode !== 0) {
-      const severity = EXIT_CODE_SEVERITY[toolOutput.exitCode] || 'error';
-      signals.push({
-        type: 'exit_code',
-        weight: 0.9,
-        value: toolOutput.exitCode,
-        description: `Non-zero exit code: ${toolOutput.exitCode} (${severity})`,
-      });
-    }
-
-    // Signal 2: Stderr presence
-    if (toolOutput.stderr && toolOutput.stderr.trim().length > 0) {
-      const hasErrorKeywords = this.containsErrorKeywords(toolOutput.stderr);
-      const stderrWeight = hasErrorKeywords ? 0.85 : 0.4;
-      signals.push({
-        type: 'stderr',
-        weight: stderrWeight,
-        value: toolOutput.stderr.substring(0, 500),
-        description: hasErrorKeywords ? 'Stderr with error keywords' : 'Stderr output present',
-      });
-    }
-
-    // Signal 3: Error patterns
-    const patternMatches = this.detectErrorPatterns(combinedOutput);
-    signals.push(...patternMatches);
-
-    // Signal 4: Stack trace
-    const stackTrace = this.detectStackTrace(combinedOutput);
-    if (stackTrace.hasStackTrace) {
-      signals.push({
-        type: 'stack_trace',
-        weight: 0.95,
-        value: stackTrace.frames.slice(0, 5).join('\n'),
-        description: `${stackTrace.language} stack trace detected`,
-      });
-    }
-
-    // Calculate confidence
-    const confidence = this.calculateConfidence(signals);
-    const detected = confidence >= 0.5;
-
-    // Determine error type and severity
-    const errorType = this.classifyErrorType(signals, combinedOutput);
-    const severity = this.determineSeverity(signals, toolOutput.exitCode);
-
-    // Extract error details
-    const { message, stack } = this.extractErrorDetails(combinedOutput);
-
-    // Sanitize output
-    const sanitizedMessage = this.privacyFilter.sanitize(message);
-    const sanitizedStack = stack ? this.privacyFilter.sanitize(stack) : undefined;
-    const sanitizedOutput = this.privacyFilter.sanitize(combinedOutput.substring(0, 5000));
-
-    return {
-      detected,
-      confidence,
-      errorType,
-      severity,
-      signals,
-      errorMessage: sanitizedMessage.sanitized,
-      errorStack: sanitizedStack?.sanitized,
-      rawOutput: sanitizedOutput.sanitized,
-    };
-  }
+/**
+ * Create an ErrorDetector instance
+ * Factory function pattern to avoid ES6 class issues with Bun
+ */
+export function createErrorDetector(privacyFilter?: PrivacyFilter): ErrorDetector {
+  const filter = privacyFilter || createPrivacyFilter();
 
   /**
    * Check if content contains error keywords
    */
-  private containsErrorKeywords(content: string): boolean {
+  function containsErrorKeywords(content: string): boolean {
     return ERROR_PATTERNS.universal.some((p) => p.test(content));
   }
 
   /**
    * Detect error patterns in content
    */
-  private detectErrorPatterns(content: string): DetectedSignal[] {
+  function detectErrorPatterns(content: string): DetectedSignal[] {
     const signals: DetectedSignal[] = [];
     const weights: Record<string, number> = {
       prefixed: 0.85,
@@ -241,7 +171,7 @@ export class ErrorDetector {
   /**
    * Detect stack traces in content
    */
-  private detectStackTrace(content: string): StackTraceInfo {
+  function detectStackTrace(content: string): StackTraceInfo {
     for (const [language, pattern] of Object.entries(STACK_TRACE_PATTERNS)) {
       const globalPattern = new RegExp(pattern.source, 'gm');
       const matches = content.match(globalPattern);
@@ -264,7 +194,7 @@ export class ErrorDetector {
   /**
    * Calculate confidence score from signals
    */
-  private calculateConfidence(signals: DetectedSignal[]): number {
+  function calculateConfidence(signals: DetectedSignal[]): number {
     if (signals.length === 0) return 0;
 
     // Weighted average with diminishing returns for multiple signals
@@ -280,7 +210,7 @@ export class ErrorDetector {
   /**
    * Classify error type based on signals and content
    */
-  private classifyErrorType(signals: DetectedSignal[], content: string): ErrorType {
+  function classifyErrorType(signals: DetectedSignal[], content: string): ErrorType {
     // Check for specific patterns
     if (ERROR_PATTERNS.build.some((p) => p.test(content))) return 'build';
     if (ERROR_PATTERNS.package.some((p) => p.test(content))) return 'dependency';
@@ -307,7 +237,7 @@ export class ErrorDetector {
   /**
    * Determine severity from signals and exit code
    */
-  private determineSeverity(signals: DetectedSignal[], exitCode?: number): Severity {
+  function determineSeverity(signals: DetectedSignal[], exitCode?: number): Severity {
     // Check exit code first
     if (exitCode !== undefined && EXIT_CODE_SEVERITY[exitCode]) {
       return EXIT_CODE_SEVERITY[exitCode];
@@ -322,16 +252,29 @@ export class ErrorDetector {
   }
 
   /**
+   * Check if a line looks like an error message
+   */
+  function isErrorLine(line: string): boolean {
+    const trimmed = line.trim();
+    return (
+      /^(Error|TypeError|ReferenceError|SyntaxError|RangeError):/i.test(trimmed) ||
+      /^(error|FAIL|fatal|panic)\b/i.test(trimmed) ||
+      /^error\[E\d+\]:/.test(trimmed) ||
+      /^error TS\d+:/.test(trimmed)
+    );
+  }
+
+  /**
    * Extract error message and stack from output
    */
-  private extractErrorDetails(output: string): { message: string; stack?: string } {
+  function extractErrorDetails(output: string): { message: string; stack?: string } {
     const lines = output.split('\n');
     let message = '';
     let stack = '';
     let inStack = false;
 
     for (const line of lines) {
-      if (this.isErrorLine(line) && !message) {
+      if (isErrorLine(line) && !message) {
         message = line.trim();
         inStack = true;
       } else if (
@@ -361,19 +304,89 @@ export class ErrorDetector {
     };
   }
 
-  /**
-   * Check if a line looks like an error message
-   */
-  private isErrorLine(line: string): boolean {
-    const trimmed = line.trim();
-    return (
-      /^(Error|TypeError|ReferenceError|SyntaxError|RangeError):/i.test(trimmed) ||
-      /^(error|FAIL|fatal|panic)\b/i.test(trimmed) ||
-      /^error\[E\d+\]:/.test(trimmed) ||
-      /^error TS\d+:/.test(trimmed)
-    );
-  }
+  return {
+    /**
+     * Detect if output contains an error
+     */
+    detect(toolOutput: ToolOutput): ErrorDetectionResult {
+      const signals: DetectedSignal[] = [];
+      const combinedOutput = `${toolOutput.output || ''}\n${toolOutput.stderr || ''}`;
+
+      // Signal 1: Exit code
+      if (toolOutput.exitCode !== undefined && toolOutput.exitCode !== 0) {
+        const severity = EXIT_CODE_SEVERITY[toolOutput.exitCode] || 'error';
+        signals.push({
+          type: 'exit_code',
+          weight: 0.9,
+          value: toolOutput.exitCode,
+          description: `Non-zero exit code: ${toolOutput.exitCode} (${severity})`,
+        });
+      }
+
+      // Signal 2: Stderr presence
+      if (toolOutput.stderr && toolOutput.stderr.trim().length > 0) {
+        const hasErrorKeywords = containsErrorKeywords(toolOutput.stderr);
+        const stderrWeight = hasErrorKeywords ? 0.85 : 0.4;
+        signals.push({
+          type: 'stderr',
+          weight: stderrWeight,
+          value: toolOutput.stderr.substring(0, 500),
+          description: hasErrorKeywords ? 'Stderr with error keywords' : 'Stderr output present',
+        });
+      }
+
+      // Signal 3: Error patterns
+      const patternMatches = detectErrorPatterns(combinedOutput);
+      signals.push(...patternMatches);
+
+      // Signal 4: Stack trace
+      const stackTrace = detectStackTrace(combinedOutput);
+      if (stackTrace.hasStackTrace) {
+        signals.push({
+          type: 'stack_trace',
+          weight: 0.95,
+          value: stackTrace.frames.slice(0, 5).join('\n'),
+          description: `${stackTrace.language} stack trace detected`,
+        });
+      }
+
+      // Calculate confidence
+      const confidence = calculateConfidence(signals);
+      const detected = confidence >= 0.5;
+
+      // Determine error type and severity
+      const errorType = classifyErrorType(signals, combinedOutput);
+      const severity = determineSeverity(signals, toolOutput.exitCode);
+
+      // Extract error details
+      const { message, stack } = extractErrorDetails(combinedOutput);
+
+      // Sanitize output
+      const sanitizedMessage = filter.sanitize(message);
+      const sanitizedStack = stack ? filter.sanitize(stack) : undefined;
+      const sanitizedOutput = filter.sanitize(combinedOutput.substring(0, 5000));
+
+      return {
+        detected,
+        confidence,
+        errorType,
+        severity,
+        signals,
+        errorMessage: sanitizedMessage.sanitized,
+        errorStack: sanitizedStack?.sanitized,
+        rawOutput: sanitizedOutput.sanitized,
+      };
+    },
+  };
 }
 
-// Export default instance
-export const defaultErrorDetector = new ErrorDetector();
+/**
+ * Legacy class wrapper for backwards compatibility
+ * @deprecated Use createErrorDetector() instead
+ */
+export const ErrorDetector = {
+  create: createErrorDetector,
+};
+
+// Export default instance factory
+export const defaultErrorDetector = createErrorDetector();

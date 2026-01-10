@@ -10,83 +10,66 @@ const DEFAULT_DIMENSIONS = 1536;
 const MAX_INPUT_LENGTH = 30000; // ~8000 tokens
 
 /**
- * Embedding Service Class
- * Generates embeddings for error messages and solutions
+ * EmbeddingService interface - defines all public methods
  */
-export class EmbeddingService {
-  private client: OpenAI;
-  private model: string;
-  private dimensions: number;
-
-  constructor(apiKey: string, model?: string, dimensions?: number) {
-    this.client = new OpenAI({ apiKey });
-    this.model = model || DEFAULT_MODEL;
-    this.dimensions = dimensions || DEFAULT_DIMENSIONS;
-  }
-
-  /**
-   * Generate embedding for a single text
-   */
-  async generate(text: string): Promise<number[]> {
-    const truncated = this.truncateText(text);
-
-    const response = await this.client.embeddings.create({
-      model: this.model,
-      input: truncated,
-      dimensions: this.dimensions,
-    });
-
-    return response.data[0].embedding;
-  }
-
-  /**
-   * Generate embeddings for multiple texts
-   */
-  async generateBatch(texts: string[]): Promise<number[][]> {
-    const truncated = texts.map((t) => this.truncateText(t));
-
-    const response = await this.client.embeddings.create({
-      model: this.model,
-      input: truncated,
-      dimensions: this.dimensions,
-    });
-
-    return response.data.map((d) => d.embedding);
-  }
-
-  /**
-   * Generate embedding for error context
-   * Combines error message, stack trace, and context
-   */
-  async generateErrorEmbedding(
+export interface EmbeddingService {
+  generate(text: string): Promise<number[]>;
+  generateBatch(texts: string[]): Promise<number[][]>;
+  generateErrorEmbedding(
     errorMessage: string,
     errorStack?: string,
     context?: { language?: string; framework?: string }
-  ): Promise<number[]> {
-    // Build context string
-    const parts: string[] = [];
+  ): Promise<number[]>;
+  getDimensions(): number;
+  getModel(): string;
+}
 
-    if (context?.language) {
-      parts.push(`Language: ${context.language}`);
-    }
-    if (context?.framework) {
-      parts.push(`Framework: ${context.framework}`);
-    }
+/**
+ * EmbeddingService configuration
+ */
+export interface EmbeddingServiceConfig {
+  apiKey: string;
+  model?: string;
+  dimensions?: number;
+}
 
-    parts.push(`Error: ${errorMessage}`);
-
-    if (errorStack) {
-      parts.push(`Stack Trace:\n${errorStack}`);
-    }
-
-    const text = parts.join('\n');
-    return this.generate(text);
+/**
+ * Calculate cosine similarity between two embeddings
+ */
+export function cosineSimilarity(a: number[], b: number[]): number {
+  if (a.length !== b.length) {
+    throw new Error('Embeddings must have same dimensions');
   }
+
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+
+  for (let i = 0; i < a.length; i++) {
+    dotProduct += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+
+  const magnitude = Math.sqrt(normA) * Math.sqrt(normB);
+  if (magnitude === 0) return 0;
+
+  return dotProduct / magnitude;
+}
+
+/**
+ * Create an EmbeddingService instance
+ * Factory function pattern to avoid ES6 class issues with Bun
+ */
+export function createEmbeddingService(config: EmbeddingServiceConfig): EmbeddingService {
+  const client = new OpenAI({ apiKey: config.apiKey });
+  const model = config.model || DEFAULT_MODEL;
+  const dimensions = config.dimensions || DEFAULT_DIMENSIONS;
 
   /**
    * Truncate text to fit within model limits
    */
-  private truncateText(text: string): string {
+  function truncateText(text: string): string {
     if (text.length <= MAX_INPUT_LENGTH) {
       return text;
     }
@@ -102,52 +85,87 @@ export class EmbeddingService {
     return truncated;
   }
 
-  /**
-   * Calculate cosine similarity between two embeddings
-   */
-  static cosineSimilarity(a: number[], b: number[]): number {
-    if (a.length !== b.length) {
-      throw new Error('Embeddings must have same dimensions');
-    }
+  return {
+    /**
+     * Generate embedding for a single text
+     */
+    async generate(text: string): Promise<number[]> {
+      const truncated = truncateText(text);
 
-    let dotProduct = 0;
-    let normA = 0;
-    let normB = 0;
+      const response = await client.embeddings.create({
+        model,
+        input: truncated,
+        dimensions,
+      });
 
-    for (let i = 0; i < a.length; i++) {
-      dotProduct += a[i] * b[i];
-      normA += a[i] * a[i];
-      normB += b[i] * b[i];
-    }
+      return response.data[0].embedding;
+    },
 
-    const magnitude = Math.sqrt(normA) * Math.sqrt(normB);
-    if (magnitude === 0) return 0;
+    /**
+     * Generate embeddings for multiple texts
+     */
+    async generateBatch(texts: string[]): Promise<number[][]> {
+      const truncated = texts.map((t) => truncateText(t));
 
-    return dotProduct / magnitude;
-  }
+      const response = await client.embeddings.create({
+        model,
+        input: truncated,
+        dimensions,
+      });
 
-  /**
-   * Get embedding dimensions
-   */
-  getDimensions(): number {
-    return this.dimensions;
-  }
+      return response.data.map((d) => d.embedding);
+    },
 
-  /**
-   * Get model name
-   */
-  getModel(): string {
-    return this.model;
-  }
+    /**
+     * Generate embedding for error context
+     * Combines error message, stack trace, and context
+     */
+    async generateErrorEmbedding(
+      errorMessage: string,
+      errorStack?: string,
+      context?: { language?: string; framework?: string }
+    ): Promise<number[]> {
+      // Build context string
+      const parts: string[] = [];
+
+      if (context?.language) {
+        parts.push(`Language: ${context.language}`);
+      }
+      if (context?.framework) {
+        parts.push(`Framework: ${context.framework}`);
+      }
+
+      parts.push(`Error: ${errorMessage}`);
+
+      if (errorStack) {
+        parts.push(`Stack Trace:\n${errorStack}`);
+      }
+
+      const text = parts.join('\n');
+      return this.generate(text);
+    },
+
+    /**
+     * Get embedding dimensions
+     */
+    getDimensions(): number {
+      return dimensions;
+    },
+
+    /**
+     * Get model name
+     */
+    getModel(): string {
+      return model;
+    },
+  };
 }
 
 /**
- * Create embedding service with config
+ * Legacy class wrapper for backwards compatibility
+ * @deprecated Use createEmbeddingService() instead
  */
-export function createEmbeddingService(config: {
-  apiKey: string;
-  model?: string;
-  dimensions?: number;
-}): EmbeddingService {
-  return new EmbeddingService(config.apiKey, config.model, config.dimensions);
-}
+export const EmbeddingService = {
+  create: createEmbeddingService,
+  cosineSimilarity,
+};

@@ -220,63 +220,30 @@ const DEFAULT_FILTER_RULES: PrivacyFilterRule[] = [
 ];
 
 /**
- * Privacy Filter Pipeline
- * Applies multiple filtering rules to sanitize sensitive content
+ * PrivacyFilter interface - defines all public methods
  */
-export class PrivacyFilter {
-  private rules: PrivacyFilterRule[];
+export interface PrivacyFilter {
+  sanitize(content: string, context?: FilterContext): SanitizedContent;
+  addRule(rule: PrivacyFilterRule): void;
+  removeRule(name: string): boolean;
+  getRules(): ReadonlyArray<PrivacyFilterRule>;
+  containsSensitiveData(content: string): boolean;
+}
 
-  constructor(customRules?: PrivacyFilterRule[]) {
-    // Combine default and custom rules, sort by priority
-    this.rules = [...DEFAULT_FILTER_RULES, ...(customRules || [])].sort(
-      (a, b) => b.priority - a.priority
-    );
-  }
-
-  /**
-   * Sanitize content by applying all filter rules
-   */
-  sanitize(content: string, context?: FilterContext): SanitizedContent {
-    let result = content;
-    const appliedFilters: string[] = [];
-    let totalRedacted = 0;
-
-    // Apply each filter rule in priority order
-    for (const rule of this.rules) {
-      const before = result;
-
-      if (typeof rule.replacement === 'function') {
-        result = result.replace(rule.pattern, rule.replacement as (...args: string[]) => string);
-      } else {
-        result = result.replace(rule.pattern, rule.replacement);
-      }
-
-      if (result !== before) {
-        const matches = before.match(rule.pattern);
-        if (matches) {
-          totalRedacted += matches.length;
-          appliedFilters.push(rule.name);
-        }
-      }
-    }
-
-    // Apply path generalization if context provided
-    if (context) {
-      result = this.generalizePaths(result, context);
-    }
-
-    return {
-      original: content,
-      sanitized: result,
-      redactedCount: totalRedacted,
-      appliedFilters: [...new Set(appliedFilters)],
-    };
-  }
+/**
+ * Create a PrivacyFilter instance
+ * Factory function pattern to avoid ES6 class issues with Bun
+ */
+export function createPrivacyFilter(customRules?: PrivacyFilterRule[]): PrivacyFilter {
+  // Combine default and custom rules, sort by priority
+  const rules = [...DEFAULT_FILTER_RULES, ...(customRules || [])].sort(
+    (a, b) => b.priority - a.priority
+  );
 
   /**
    * Generalize file paths while keeping meaningful structure
    */
-  private generalizePaths(content: string, context: FilterContext): string {
+  function generalizePaths(content: string, context: FilterContext): string {
     let result = content;
 
     // Replace project root with <PROJECT>
@@ -300,53 +267,103 @@ export class PrivacyFilter {
     return result;
   }
 
-  /**
-   * Add a custom filter rule
-   */
-  addRule(rule: PrivacyFilterRule): void {
-    this.rules.push(rule);
-    this.rules.sort((a, b) => b.priority - a.priority);
-  }
+  return {
+    /**
+     * Sanitize content by applying all filter rules
+     */
+    sanitize(content: string, context?: FilterContext): SanitizedContent {
+      let result = content;
+      const appliedFilters: string[] = [];
+      let totalRedacted = 0;
 
-  /**
-   * Remove a filter rule by name
-   */
-  removeRule(name: string): boolean {
-    const index = this.rules.findIndex((r) => r.name === name);
-    if (index !== -1) {
-      this.rules.splice(index, 1);
-      return true;
-    }
-    return false;
-  }
+      // Apply each filter rule in priority order
+      for (const rule of rules) {
+        const before = result;
 
-  /**
-   * Get all current rules
-   */
-  getRules(): ReadonlyArray<PrivacyFilterRule> {
-    return this.rules;
-  }
+        if (typeof rule.replacement === 'function') {
+          result = result.replace(rule.pattern, rule.replacement as (...args: string[]) => string);
+        } else {
+          result = result.replace(rule.pattern, rule.replacement);
+        }
 
-  /**
-   * Check if content contains sensitive data
-   * Note: Always reset regex lastIndex BEFORE testing to prevent state pollution
-   */
-  containsSensitiveData(content: string): boolean {
-    for (const rule of this.rules) {
-      if (rule.category === 'secret') {
-        // Reset lastIndex BEFORE testing to ensure consistent behavior with global regex
-        rule.pattern.lastIndex = 0;
-        const hasSensitiveData = rule.pattern.test(content);
-        // Reset again after test to clean up state
-        rule.pattern.lastIndex = 0;
-        if (hasSensitiveData) {
-          return true;
+        if (result !== before) {
+          const matches = before.match(rule.pattern);
+          if (matches) {
+            totalRedacted += matches.length;
+            appliedFilters.push(rule.name);
+          }
         }
       }
-    }
-    return false;
-  }
+
+      // Apply path generalization if context provided
+      if (context) {
+        result = generalizePaths(result, context);
+      }
+
+      return {
+        original: content,
+        sanitized: result,
+        redactedCount: totalRedacted,
+        appliedFilters: [...new Set(appliedFilters)],
+      };
+    },
+
+    /**
+     * Add a custom filter rule
+     */
+    addRule(rule: PrivacyFilterRule): void {
+      rules.push(rule);
+      rules.sort((a, b) => b.priority - a.priority);
+    },
+
+    /**
+     * Remove a filter rule by name
+     */
+    removeRule(name: string): boolean {
+      const index = rules.findIndex((r) => r.name === name);
+      if (index !== -1) {
+        rules.splice(index, 1);
+        return true;
+      }
+      return false;
+    },
+
+    /**
+     * Get all current rules
+     */
+    getRules(): ReadonlyArray<PrivacyFilterRule> {
+      return rules;
+    },
+
+    /**
+     * Check if content contains sensitive data
+     * Note: Always reset regex lastIndex BEFORE testing to prevent state pollution
+     */
+    containsSensitiveData(content: string): boolean {
+      for (const rule of rules) {
+        if (rule.category === 'secret') {
+          // Reset lastIndex BEFORE testing to ensure consistent behavior with global regex
+          rule.pattern.lastIndex = 0;
+          const hasSensitiveData = rule.pattern.test(content);
+          // Reset again after test to clean up state
+          rule.pattern.lastIndex = 0;
+          if (hasSensitiveData) {
+            return true;
+          }
+        }
+      }
+      return false;
+    },
+  };
 }
+
+/**
+ * Legacy class wrapper for backwards compatibility
+ * @deprecated Use createPrivacyFilter() instead
+ */
+export const PrivacyFilter = {
+  create: createPrivacyFilter,
+};
 
 /**
  * Create default filter context from project directory
@@ -367,5 +384,5 @@ export function createFilterContext(projectDirectory: string): FilterContext {
   };
 }
 
-// Export default instance
-export const defaultPrivacyFilter = new PrivacyFilter();
+// Export default instance factory
+export const defaultPrivacyFilter = createPrivacyFilter();

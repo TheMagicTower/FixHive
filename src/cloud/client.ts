@@ -13,7 +13,7 @@ import type {
   DuplicateCheckResult,
   ContributorStats,
 } from '../types/index.js';
-import { EmbeddingService } from './embedding.js';
+import { createEmbeddingService, type EmbeddingService } from './embedding.js';
 import { generateContributorId } from '../core/hash.js';
 
 /**
@@ -82,7 +82,7 @@ export async function createCloudClient(config: CloudClientConfig): Promise<Clou
   let embedding: EmbeddingService | null = null;
   if (config.openaiApiKey) {
     try {
-      embedding = new EmbeddingService(config.openaiApiKey);
+      embedding = createEmbeddingService({ apiKey: config.openaiApiKey });
     } catch (err) {
       console.warn('[FixHive] Failed to initialize embedding service:', err);
     }

@@ -7,9 +7,9 @@ import type { Plugin } from '@opencode-ai/plugin';
 import { tool } from '@opencode-ai/plugin';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { ErrorDetector } from '../core/error-detector.js';
-import { PrivacyFilter, createFilterContext } from '../core/privacy-filter.js';
-import { LocalStore } from '../storage/local-store.js';
+import { createErrorDetector } from '../core/error-detector.js';
+import { createPrivacyFilter, createFilterContext, type PrivacyFilter } from '../core/privacy-filter.js';
+import { createLocalStore, type LocalStore } from '../storage/local-store.js';
 import { createCloudClient, type CloudClient } from '../cloud/client.js';
 import { generateErrorFingerprint } from '../core/hash.js';
 import { createTools } from './tools.js';
@@ -38,11 +38,11 @@ export const FixHivePlugin: Plugin = async (ctx) => {
   console.log(`[FixHive] Project: ${ctx.directory}`);
   console.log(`[FixHive] Cloud: ${config.supabaseUrl ? 'enabled' : 'disabled'}`);
 
-  // Initialize components
-  const privacyFilter = new PrivacyFilter();
+  // Initialize components using factory functions
+  const privacyFilter = createPrivacyFilter();
   const filterContext = createFilterContext(ctx.directory);
-  const errorDetector = new ErrorDetector(privacyFilter);
-  const localStore = new LocalStore(ctx.directory);
+  const errorDetector = createErrorDetector(privacyFilter);
+  const localStore = createLocalStore(ctx.directory);
 
   // Initialize cloud client if configured
   let cloudClient: CloudClient | null = null;
