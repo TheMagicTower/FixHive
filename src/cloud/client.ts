@@ -39,94 +39,112 @@ export interface CloudClientConfig {
 }
 
 /**
- * Cloud Client Class
- * Manages communication with Supabase cloud database
+ * CloudClient interface - defines all public methods
  */
-export class CloudClient {
-  private supabase: SupabaseClient;
-  private embedding: EmbeddingService | null;
-  private contributorId: string;
-  private similarityThreshold: number;
+export interface CloudClient {
+  searchSimilar(request: SearchRequest): Promise<SearchResponse>;
+  uploadResolution(request: UploadRequest): Promise<UploadResponse>;
+  checkDuplicate(errorHash: string, embedding: number[]): Promise<DuplicateCheckResult>;
+  vote(knowledgeId: string, helpful: boolean): Promise<{ success: boolean; error?: string }>;
+  reportEntry(knowledgeId: string, reason?: string): Promise<{ success: boolean }>;
+  reportHelpful(knowledgeId: string): Promise<void>;
+  getContributorStats(): Promise<ContributorStats>;
+  getEntry(id: string): Promise<CloudKnowledgeEntry | null>;
+  getContributorId(): string;
+  hasEmbeddingService(): boolean;
+}
 
-  private constructor(
-    supabase: SupabaseClient,
-    embedding: EmbeddingService | null,
-    contributorId: string,
-    similarityThreshold: number
-  ) {
-    this.supabase = supabase;
-    this.embedding = embedding;
-    this.contributorId = contributorId;
-    this.similarityThreshold = similarityThreshold;
+/**
+ * Map database row to CloudKnowledgeEntry
+ */
+function mapToKnowledgeEntry(row: Record<string, unknown>): CloudKnowledgeEntry {
+  return {
+    id: row.id as string,
+    errorHash: row.error_hash as string,
+    errorType: row.error_type as CloudKnowledgeEntry['errorType'],
+    errorMessage: row.error_message as string,
+    errorStack: (row.error_stack as string) || undefined,
+    language: row.language as CloudKnowledgeEntry['language'],
+    framework: (row.framework as string) || undefined,
+    dependencies: (row.dependencies as Record<string, string>) || undefined,
+    resolutionDescription: row.resolution_description as string,
+    resolutionCode: (row.resolution_code as string) || undefined,
+    resolutionSteps: (row.resolution_steps as string[]) || undefined,
+    contributorId: row.contributor_id as string,
+    upvotes: (row.upvotes as number) || 0,
+    downvotes: (row.downvotes as number) || 0,
+    usageCount: (row.usage_count as number) || 0,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
+    isVerified: (row.is_verified as boolean) || false,
+    similarity: (row.similarity as number) || undefined,
+  };
+}
+
+/**
+ * Create a CloudClient instance
+ * Factory function pattern to avoid ES6 class issues with Bun
+ */
+export async function createCloudClient(config: CloudClientConfig): Promise<CloudClient> {
+  // Dynamic import for Bun compatibility
+  const createClientFn = await getCreateClient();
+  const supabase: SupabaseClient = createClientFn(config.supabaseUrl, config.supabaseAnonKey);
+
+  // Initialize embedding service (optional)
+  let embedding: EmbeddingService | null = null;
+  if (config.openaiApiKey) {
+    try {
+      embedding = new EmbeddingService(config.openaiApiKey);
+    } catch (err) {
+      console.warn('[FixHive] Failed to initialize embedding service:', err);
+    }
   }
 
-  /**
-   * Create a CloudClient instance (async factory for Bun compatibility)
-   */
-  static async create(config: CloudClientConfig): Promise<CloudClient> {
-    // Dynamic import for Bun compatibility
-    const createClientFn = await getCreateClient();
-    const supabase = createClientFn(config.supabaseUrl, config.supabaseAnonKey);
+  const contributorId = config.contributorId || generateContributorId();
+  const similarityThreshold = config.similarityThreshold || 0.7;
 
-    // Initialize embedding service (optional)
-    let embedding: EmbeddingService | null = null;
-    if (config.openaiApiKey) {
-      try {
-        embedding = new EmbeddingService(config.openaiApiKey);
-      } catch (err) {
-        console.warn('[FixHive] Failed to initialize embedding service:', err);
-      }
+  // Private helper for duplicate check
+  async function checkDuplicateInternal(errorHash: string, embeddingData: number[]): Promise<DuplicateCheckResult> {
+    // First check by exact hash
+    const { data: hashMatch } = await supabase
+      .from('knowledge_entries')
+      .select('id')
+      .eq('error_hash', errorHash)
+      .limit(1)
+      .single();
+
+    if (hashMatch) {
+      return {
+        isDuplicate: true,
+        existingId: hashMatch.id,
+        similarityScore: 1.0,
+      };
     }
 
-    const contributorId = config.contributorId || generateContributorId();
-    const similarityThreshold = config.similarityThreshold || 0.7;
-
-    return new CloudClient(supabase, embedding, contributorId, similarityThreshold);
-  }
-
-  /**
-   * Search for similar errors in cloud knowledge base
-   */
-  async searchSimilar(request: SearchRequest): Promise<SearchResponse> {
-    const startTime = Date.now();
-
-    // If no embedding service, fall back to text search
-    if (!this.embedding) {
-      return this.searchByText(request);
-    }
-
-    // Generate embedding for search query
-    const queryText = `${request.errorMessage}\n${request.errorStack || ''}`;
-    const embedding = await this.embedding.generate(queryText);
-
-    // Call Supabase RPC function
-    const { data, error } = await this.supabase.rpc('search_similar_errors', {
-      query_embedding: embedding,
-      match_threshold: request.threshold || this.similarityThreshold,
-      match_count: request.limit || 10,
-      filter_language: request.language || null,
-      filter_framework: request.framework || null,
+    // Then check by embedding similarity
+    const { data, error } = await supabase.rpc('check_duplicate_entry', {
+      new_hash: errorHash,
+      new_embedding: embeddingData,
+      similarity_threshold: 0.95,
     });
 
-    if (error) {
-      console.error('Search error:', error);
-      return { results: [], queryTime: Date.now() - startTime, cached: false };
+    if (error || !data || data.length === 0) {
+      return { isDuplicate: false, similarityScore: 0 };
     }
 
+    const result = data[0];
     return {
-      results: (data || []).map(this.mapToKnowledgeEntry),
-      queryTime: Date.now() - startTime,
-      cached: false,
+      isDuplicate: result.is_duplicate,
+      existingId: result.existing_id,
+      similarityScore: result.similarity_score,
     };
   }
 
-  /**
-   * Fallback text-based search
-   */
-  private async searchByText(request: SearchRequest): Promise<SearchResponse> {
+  // Private helper for text-based search
+  async function searchByText(request: SearchRequest): Promise<SearchResponse> {
     const startTime = Date.now();
 
-    let query = this.supabase
+    let query = supabase
       .from('knowledge_entries')
       .select('*')
       .ilike('error_message', `%${request.errorMessage.substring(0, 100)}%`)
@@ -149,267 +167,211 @@ export class CloudClient {
     }
 
     return {
-      results: (data || []).map(this.mapToKnowledgeEntry),
+      results: (data || []).map(mapToKnowledgeEntry),
       queryTime: Date.now() - startTime,
       cached: false,
     };
   }
 
-  /**
-   * Upload a resolution to cloud knowledge base
-   */
-  async uploadResolution(request: UploadRequest): Promise<UploadResponse> {
-    const { errorRecord, resolution, resolutionCode, resolutionSteps } = request;
+  // Return object with all methods (closure pattern)
+  return {
+    async searchSimilar(request: SearchRequest): Promise<SearchResponse> {
+      const startTime = Date.now();
 
-    // Generate embedding if available
-    let embedding: number[] | null = null;
-    if (this.embedding) {
-      const embeddingText = `${errorRecord.errorMessage}\n${errorRecord.errorStack || ''}`;
-      embedding = await this.embedding.generate(embeddingText);
-    }
+      // If no embedding service, fall back to text search
+      if (!embedding) {
+        return searchByText(request);
+      }
 
-    // Check for duplicates
-    if (embedding) {
-      const duplicateCheck = await this.checkDuplicate(errorRecord.errorHash, embedding);
+      // Generate embedding for search query
+      const queryText = `${request.errorMessage}\n${request.errorStack || ''}`;
+      const queryEmbedding = await embedding.generate(queryText);
 
-      if (duplicateCheck.isDuplicate && duplicateCheck.similarityScore > 0.95) {
-        // Increment usage count on existing entry
-        await this.supabase.rpc('increment_usage_count', {
-          entry_id: duplicateCheck.existingId,
-        });
+      // Call Supabase RPC function
+      const { data, error } = await supabase.rpc('search_similar_errors', {
+        query_embedding: queryEmbedding,
+        match_threshold: request.threshold || similarityThreshold,
+        match_count: request.limit || 10,
+        filter_language: request.language || null,
+        filter_framework: request.framework || null,
+      });
 
+      if (error) {
+        console.error('Search error:', error);
+        return { results: [], queryTime: Date.now() - startTime, cached: false };
+      }
+
+      return {
+        results: (data || []).map(mapToKnowledgeEntry),
+        queryTime: Date.now() - startTime,
+        cached: false,
+      };
+    },
+
+    async uploadResolution(request: UploadRequest): Promise<UploadResponse> {
+      const { errorRecord, resolution, resolutionCode, resolutionSteps } = request;
+
+      // Generate embedding if available
+      let embeddingData: number[] | null = null;
+      if (embedding) {
+        const embeddingText = `${errorRecord.errorMessage}\n${errorRecord.errorStack || ''}`;
+        embeddingData = await embedding.generate(embeddingText);
+      }
+
+      // Check for duplicates
+      if (embeddingData) {
+        const duplicateCheck = await checkDuplicateInternal(errorRecord.errorHash, embeddingData);
+
+        if (duplicateCheck.isDuplicate && duplicateCheck.similarityScore > 0.95) {
+          // Increment usage count on existing entry
+          await supabase.rpc('increment_usage_count', {
+            entry_id: duplicateCheck.existingId,
+          });
+
+          return {
+            success: true,
+            isDuplicate: true,
+            existingId: duplicateCheck.existingId,
+            message: 'Similar solution already exists. Usage count incremented.',
+          };
+        }
+      }
+
+      // Insert new entry
+      const { data, error } = await supabase
+        .from('knowledge_entries')
+        .insert({
+          error_hash: errorRecord.errorHash,
+          error_type: errorRecord.errorType,
+          error_message: errorRecord.errorMessage,
+          error_stack: errorRecord.errorStack,
+          language: errorRecord.language || 'other',
+          framework: errorRecord.framework,
+          embedding: embeddingData,
+          resolution_description: resolution,
+          resolution_code: resolutionCode,
+          resolution_steps: resolutionSteps,
+          contributor_id: contributorId,
+        })
+        .select('id')
+        .single();
+
+      if (error) {
         return {
-          success: true,
-          isDuplicate: true,
-          existingId: duplicateCheck.existingId,
-          message: 'Similar solution already exists. Usage count incremented.',
+          success: false,
+          isDuplicate: false,
+          message: `Upload failed: ${error.message}`,
         };
       }
-    }
 
-    // Insert new entry
-    const { data, error } = await this.supabase
-      .from('knowledge_entries')
-      .insert({
-        error_hash: errorRecord.errorHash,
-        error_type: errorRecord.errorType,
-        error_message: errorRecord.errorMessage,
-        error_stack: errorRecord.errorStack,
-        language: errorRecord.language || 'other',
-        framework: errorRecord.framework,
-        embedding,
-        resolution_description: resolution,
-        resolution_code: resolutionCode,
-        resolution_steps: resolutionSteps,
-        contributor_id: this.contributorId,
-      })
-      .select('id')
-      .single();
-
-    if (error) {
       return {
-        success: false,
+        success: true,
+        knowledgeId: data.id,
         isDuplicate: false,
-        message: `Upload failed: ${error.message}`,
+        message: 'Solution uploaded successfully!',
       };
-    }
+    },
 
-    return {
-      success: true,
-      knowledgeId: data.id,
-      isDuplicate: false,
-      message: 'Solution uploaded successfully!',
-    };
-  }
+    async checkDuplicate(errorHash: string, embeddingData: number[]): Promise<DuplicateCheckResult> {
+      return checkDuplicateInternal(errorHash, embeddingData);
+    },
 
-  /**
-   * Check for duplicate entries
-   */
-  async checkDuplicate(
-    errorHash: string,
-    embedding: number[]
-  ): Promise<DuplicateCheckResult> {
-    // First check by exact hash
-    const { data: hashMatch } = await this.supabase
-      .from('knowledge_entries')
-      .select('id')
-      .eq('error_hash', errorHash)
-      .limit(1)
-      .single();
+    async vote(knowledgeId: string, helpful: boolean): Promise<{ success: boolean; error?: string }> {
+      const voteType = helpful ? 'up' : 'down';
 
-    if (hashMatch) {
-      return {
-        isDuplicate: true,
-        existingId: hashMatch.id,
-        similarityScore: 1.0,
-      };
-    }
-
-    // Then check by embedding similarity
-    const { data, error } = await this.supabase.rpc('check_duplicate_entry', {
-      new_hash: errorHash,
-      new_embedding: embedding,
-      similarity_threshold: 0.95,
-    });
-
-    if (error || !data || data.length === 0) {
-      return { isDuplicate: false, similarityScore: 0 };
-    }
-
-    const result = data[0];
-    return {
-      isDuplicate: result.is_duplicate,
-      existingId: result.existing_id,
-      similarityScore: result.similarity_score,
-    };
-  }
-
-  /**
-   * Vote on a knowledge entry (with duplicate vote prevention)
-   */
-  async vote(knowledgeId: string, helpful: boolean): Promise<{ success: boolean; error?: string }> {
-    const voteType = helpful ? 'up' : 'down';
-
-    const { data, error } = await this.supabase.rpc('safe_vote', {
-      p_entry_id: knowledgeId,
-      p_user_hash: this.contributorId,
-      p_vote_type: voteType,
-    });
-
-    if (error) {
-      return { success: false, error: error.message };
-    }
-
-    const result = data as { success: boolean; error?: string; action?: string };
-
-    // Log usage only on successful new vote
-    if (result.success) {
-      await this.supabase.from('usage_logs').insert({
-        knowledge_id: knowledgeId,
-        action: helpful ? 'upvote' : 'downvote',
-        user_hash: this.contributorId,
+      const { data, error } = await supabase.rpc('safe_vote', {
+        p_entry_id: knowledgeId,
+        p_user_hash: contributorId,
+        p_vote_type: voteType,
       });
-    }
 
-    return result;
-  }
+      if (error) {
+        return { success: false, error: error.message };
+      }
 
-  /**
-   * Report an entry for review
-   */
-  async reportEntry(knowledgeId: string, reason?: string): Promise<{ success: boolean }> {
-    const { data, error } = await this.supabase.rpc('report_entry', {
-      p_entry_id: knowledgeId,
-      p_user_hash: this.contributorId,
-      p_reason: reason || null,
-    });
+      const result = data as { success: boolean; error?: string; action?: string };
 
-    if (error) {
-      return { success: false };
-    }
+      // Log usage only on successful new vote
+      if (result.success) {
+        await supabase.from('usage_logs').insert({
+          knowledge_id: knowledgeId,
+          action: helpful ? 'upvote' : 'downvote',
+          user_hash: contributorId,
+        });
+      }
 
-    return data as { success: boolean };
-  }
+      return result;
+    },
 
-  /**
-   * Report helpful usage
-   */
-  async reportHelpful(knowledgeId: string): Promise<void> {
-    await this.supabase.rpc('increment_usage_count', {
-      entry_id: knowledgeId,
-    });
+    async reportEntry(knowledgeId: string, reason?: string): Promise<{ success: boolean }> {
+      const { data, error } = await supabase.rpc('report_entry', {
+        p_entry_id: knowledgeId,
+        p_user_hash: contributorId,
+        p_reason: reason || null,
+      });
 
-    await this.supabase.from('usage_logs').insert({
-      knowledge_id: knowledgeId,
-      action: 'apply',
-      user_hash: this.contributorId,
-    });
-  }
+      if (error) {
+        return { success: false };
+      }
 
-  /**
-   * Get contributor statistics
-   */
-  async getContributorStats(): Promise<ContributorStats> {
-    const { data } = await this.supabase
-      .from('knowledge_entries')
-      .select('upvotes, usage_count')
-      .eq('contributor_id', this.contributorId);
+      return data as { success: boolean };
+    },
 
-    if (!data || data.length === 0) {
-      return { contributionCount: 0, helpedCount: 0, totalUpvotes: 0 };
-    }
+    async reportHelpful(knowledgeId: string): Promise<void> {
+      await supabase.rpc('increment_usage_count', {
+        entry_id: knowledgeId,
+      });
 
-    return {
-      contributionCount: data.length,
-      helpedCount: data.reduce((sum, e) => sum + (e.usage_count || 0), 0),
-      totalUpvotes: data.reduce((sum, e) => sum + (e.upvotes || 0), 0),
-    };
-  }
+      await supabase.from('usage_logs').insert({
+        knowledge_id: knowledgeId,
+        action: 'apply',
+        user_hash: contributorId,
+      });
+    },
 
-  /**
-   * Get entry by ID
-   */
-  async getEntry(id: string): Promise<CloudKnowledgeEntry | null> {
-    const { data, error } = await this.supabase
-      .from('knowledge_entries')
-      .select('*')
-      .eq('id', id)
-      .single();
+    async getContributorStats(): Promise<ContributorStats> {
+      const { data } = await supabase
+        .from('knowledge_entries')
+        .select('upvotes, usage_count')
+        .eq('contributor_id', contributorId);
 
-    if (error || !data) {
-      return null;
-    }
+      if (!data || data.length === 0) {
+        return { contributionCount: 0, helpedCount: 0, totalUpvotes: 0 };
+      }
 
-    return this.mapToKnowledgeEntry(data);
-  }
+      return {
+        contributionCount: data.length,
+        helpedCount: data.reduce((sum, e) => sum + (e.usage_count || 0), 0),
+        totalUpvotes: data.reduce((sum, e) => sum + (e.upvotes || 0), 0),
+      };
+    },
 
-  /**
-   * Map database row to CloudKnowledgeEntry
-   */
-  private mapToKnowledgeEntry(row: Record<string, unknown>): CloudKnowledgeEntry {
-    return {
-      id: row.id as string,
-      errorHash: row.error_hash as string,
-      errorType: row.error_type as CloudKnowledgeEntry['errorType'],
-      errorMessage: row.error_message as string,
-      errorStack: (row.error_stack as string) || undefined,
-      language: row.language as CloudKnowledgeEntry['language'],
-      framework: (row.framework as string) || undefined,
-      dependencies: (row.dependencies as Record<string, string>) || undefined,
-      resolutionDescription: row.resolution_description as string,
-      resolutionCode: (row.resolution_code as string) || undefined,
-      resolutionSteps: (row.resolution_steps as string[]) || undefined,
-      contributorId: row.contributor_id as string,
-      upvotes: (row.upvotes as number) || 0,
-      downvotes: (row.downvotes as number) || 0,
-      usageCount: (row.usage_count as number) || 0,
-      createdAt: row.created_at as string,
-      updatedAt: row.updated_at as string,
-      isVerified: (row.is_verified as boolean) || false,
-      similarity: (row.similarity as number) || undefined,
-    };
-  }
+    async getEntry(id: string): Promise<CloudKnowledgeEntry | null> {
+      const { data, error } = await supabase
+        .from('knowledge_entries')
+        .select('*')
+        .eq('id', id)
+        .single();
 
-  /**
-   * Get contributor ID
-   */
-  getContributorId(): string {
-    return this.contributorId;
-  }
+      if (error || !data) {
+        return null;
+      }
 
-  /**
-   * Check if embedding service is available
-   */
-  hasEmbeddingService(): boolean {
-    return this.embedding !== null;
-  }
+      return mapToKnowledgeEntry(data);
+    },
+
+    getContributorId(): string {
+      return contributorId;
+    },
+
+    hasEmbeddingService(): boolean {
+      return embedding !== null;
+    },
+  };
 }
 
-/**
- * Create cloud client with config (async for Bun compatibility)
- */
-export async function createCloudClient(
-  config: CloudClientConfig
-): Promise<CloudClient> {
-  return CloudClient.create(config);
-}
+// Legacy export for backwards compatibility
+// CloudClient is now an interface, use createCloudClient() instead
+export const CloudClient = {
+  create: createCloudClient,
+};

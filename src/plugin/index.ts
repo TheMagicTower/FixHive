@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { ErrorDetector } from '../core/error-detector.js';
 import { PrivacyFilter, createFilterContext } from '../core/privacy-filter.js';
 import { LocalStore } from '../storage/local-store.js';
-import { CloudClient } from '../cloud/client.js';
+import { createCloudClient, type CloudClient } from '../cloud/client.js';
 import { generateErrorFingerprint } from '../core/hash.js';
 import { createTools } from './tools.js';
 import type { FixHiveContext, Language, FixHiveConfig } from '../types/index.js';
@@ -48,7 +48,7 @@ export const FixHivePlugin: Plugin = async (ctx) => {
   let cloudClient: CloudClient | null = null;
   if (config.supabaseUrl && config.supabaseAnonKey) {
     try {
-      cloudClient = await CloudClient.create({
+      cloudClient = await createCloudClient({
         supabaseUrl: config.supabaseUrl,
         supabaseAnonKey: config.supabaseAnonKey,
         openaiApiKey: config.openaiApiKey,
