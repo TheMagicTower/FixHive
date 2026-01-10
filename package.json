@@ -1,6 +1,6 @@
 {
   "name": "@the-magic-tower/fixhive-opencode-plugin",
-  "version": "0.1.17",
+  "version": "0.1.18",
   "description": "Community-based error knowledge sharing for OpenCode",
   "type": "module",
   "main": "dist/index.js",
