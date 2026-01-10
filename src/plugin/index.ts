@@ -30,24 +30,33 @@ const DEFAULT_CONFIG: Partial<FixHiveConfig> = {
  * FixHive Plugin Factory
  */
 export const FixHivePlugin: Plugin = async (ctx) => {
+  console.log('[FixHive:DEBUG] Step 1: Starting plugin initialization');
+
   // Load configuration from environment
   const config = loadConfig();
+  console.log('[FixHive:DEBUG] Step 2: Config loaded');
 
   // Log plugin initialization
   console.log('[FixHive] Plugin loaded');
   console.log(`[FixHive] Project: ${ctx.directory}`);
   console.log(`[FixHive] Cloud: ${config.supabaseUrl ? 'enabled' : 'disabled'}`);
 
+  console.log('[FixHive:DEBUG] Step 3: Creating privacy filter');
   // Initialize components using factory functions
   const privacyFilter = createPrivacyFilter();
+  console.log('[FixHive:DEBUG] Step 4: Creating filter context');
   const filterContext = createFilterContext(ctx.directory);
+  console.log('[FixHive:DEBUG] Step 5: Creating error detector');
   const errorDetector = createErrorDetector(privacyFilter);
+  console.log('[FixHive:DEBUG] Step 6: Creating local store');
   const localStore = createLocalStore(ctx.directory);
+  console.log('[FixHive:DEBUG] Step 7: Local store created');
 
   // Initialize cloud client if configured
   let cloudClient: CloudClient | null = null;
   if (config.supabaseUrl && config.supabaseAnonKey) {
     try {
+      console.log('[FixHive:DEBUG] Step 8: Creating cloud client');
       cloudClient = await createCloudClient({
         supabaseUrl: config.supabaseUrl,
         supabaseAnonKey: config.supabaseAnonKey,
@@ -55,6 +64,7 @@ export const FixHivePlugin: Plugin = async (ctx) => {
         contributorId: config.contributorId,
         similarityThreshold: config.similarityThreshold,
       });
+      console.log('[FixHive:DEBUG] Step 9: Cloud client created');
     } catch (err) {
       console.error('[FixHive] Failed to initialize cloud client:', err);
       console.error('[FixHive] Falling back to offline mode');
