@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { LocalStore } from '../../src/storage/local-store.js';
+import { createLocalStore, type LocalStore } from '../../src/storage/local-store.js';
 import { rmSync, mkdtempSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -10,7 +10,7 @@ describe('LocalStore', () => {
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'fixhive-test-'));
-    store = new LocalStore(tempDir);
+    store = createLocalStore(tempDir);
   });
 
   afterEach(() => {

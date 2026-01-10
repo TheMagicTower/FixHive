@@ -27,11 +27,15 @@ vi.mock('@supabase/supabase-js', () => ({
   },
 }));
 
-// Mock EmbeddingService - vitest v4 requires class/function syntax
+// Mock EmbeddingService - factory function mock
 vi.mock('../../src/cloud/embedding.js', () => ({
-  EmbeddingService: class MockEmbeddingService {
-    generate = vi.fn().mockResolvedValue(new Array(1536).fill(0.1));
-  },
+  createEmbeddingService: vi.fn().mockReturnValue({
+    generate: vi.fn().mockResolvedValue(new Array(1536).fill(0.1)),
+    generateBatch: vi.fn().mockResolvedValue([new Array(1536).fill(0.1)]),
+    generateErrorEmbedding: vi.fn().mockResolvedValue(new Array(1536).fill(0.1)),
+    getDimensions: vi.fn().mockReturnValue(1536),
+    getModel: vi.fn().mockReturnValue('text-embedding-3-small'),
+  }),
 }));
 
 describe('CloudClient', () => {
@@ -40,7 +44,7 @@ describe('CloudClient', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
 
-    client = await CloudClient.create({
+    client = await createCloudClient({
       supabaseUrl: 'https://test.supabase.co',
       supabaseAnonKey: 'test-anon-key',
       openaiApiKey: 'test-openai-key',
@@ -62,7 +66,7 @@ describe('CloudClient', () => {
     });
 
     it('should not have embedding service when no API key', async () => {
-      const clientNoEmbed = await CloudClient.create({
+      const clientNoEmbed = await createCloudClient({
         supabaseUrl: 'https://test.supabase.co',
         supabaseAnonKey: 'test-key',
       });
@@ -102,7 +106,7 @@ describe('CloudClient', () => {
     });
 
     it('should fall back to text search when no embedding', async () => {
-      const clientNoEmbed = await CloudClient.create({
+      const clientNoEmbed = await createCloudClient({
         supabaseUrl: 'https://test.supabase.co',
         supabaseAnonKey: 'test-key',
       });

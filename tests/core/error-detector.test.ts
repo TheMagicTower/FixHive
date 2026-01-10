@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { ErrorDetector, defaultErrorDetector } from '../../src/core/error-detector.js';
+import { createErrorDetector, defaultErrorDetector, type ErrorDetector } from '../../src/core/error-detector.js';
 
 describe('ErrorDetector', () => {
   let detector: ErrorDetector;
 
   beforeEach(() => {
-    detector = new ErrorDetector();
+    detector = createErrorDetector();
   });
 
   describe('Exit Code Detection', () => {

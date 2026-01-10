@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { EmbeddingService, createEmbeddingService } from '../../src/cloud/embedding.js';
+import { createEmbeddingService, cosineSimilarity, type EmbeddingService } from '../../src/cloud/embedding.js';
 
 // Mock OpenAI - vitest v4 requires class/function syntax for constructor mocks
 // Mock returns embeddings based on input array length for batch support
@@ -25,17 +25,21 @@ describe('EmbeddingService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    service = new EmbeddingService('test-api-key');
+    service = createEmbeddingService({ apiKey: 'test-api-key' });
   });
 
-  describe('constructor', () => {
+  describe('createEmbeddingService', () => {
     it('should use default model and dimensions', () => {
       expect(service.getModel()).toBe('text-embedding-3-small');
       expect(service.getDimensions()).toBe(1536);
     });
 
     it('should accept custom model and dimensions', () => {
-      const customService = new EmbeddingService('key', 'text-embedding-ada-002', 512);
+      const customService = createEmbeddingService({
+        apiKey: 'key',
+        model: 'text-embedding-ada-002',
+        dimensions: 512,
+      });
       expect(customService.getModel()).toBe('text-embedding-ada-002');
       expect(customService.getDimensions()).toBe(512);
     });
@@ -93,28 +97,28 @@ describe('EmbeddingService', () => {
   describe('cosineSimilarity', () => {
     it('should return 1 for identical vectors', () => {
       const vec = [1, 0, 0, 0];
-      const similarity = EmbeddingService.cosineSimilarity(vec, vec);
+      const similarity = cosineSimilarity(vec, vec);
       expect(similarity).toBeCloseTo(1, 5);
     });
 
     it('should return 0 for orthogonal vectors', () => {
       const vec1 = [1, 0];
       const vec2 = [0, 1];
-      const similarity = EmbeddingService.cosineSimilarity(vec1, vec2);
+      const similarity = cosineSimilarity(vec1, vec2);
       expect(similarity).toBeCloseTo(0, 5);
     });
 
     it('should return -1 for opposite vectors', () => {
       const vec1 = [1, 0];
       const vec2 = [-1, 0];
-      const similarity = EmbeddingService.cosineSimilarity(vec1, vec2);
+      const similarity = cosineSimilarity(vec1, vec2);
       expect(similarity).toBeCloseTo(-1, 5);
     });
 
     it('should handle normalized vectors correctly', () => {
       const vec1 = [0.6, 0.8]; // normalized
       const vec2 = [0.8, 0.6]; // normalized
-      const similarity = EmbeddingService.cosineSimilarity(vec1, vec2);
+      const similarity = cosineSimilarity(vec1, vec2);
       expect(similarity).toBeGreaterThan(0);
       expect(similarity).toBeLessThan(1);
     });
@@ -122,34 +126,15 @@ describe('EmbeddingService', () => {
     it('should throw error for different dimensions', () => {
       const vec1 = [1, 2, 3];
       const vec2 = [1, 2];
-      expect(() => EmbeddingService.cosineSimilarity(vec1, vec2)).toThrow(
+      expect(() => cosineSimilarity(vec1, vec2)).toThrow(
         'Embeddings must have same dimensions'
       );
     });
 
     it('should return 0 for zero vectors', () => {
       const vec = [0, 0, 0];
-      const similarity = EmbeddingService.cosineSimilarity(vec, vec);
+      const similarity = cosineSimilarity(vec, vec);
       expect(similarity).toBe(0);
-    });
-  });
-
-  describe('createEmbeddingService', () => {
-    it('should create service with config', () => {
-      const service = createEmbeddingService({
-        apiKey: 'test-key',
-        model: 'custom-model',
-        dimensions: 768,
-      });
-
-      expect(service.getModel()).toBe('custom-model');
-      expect(service.getDimensions()).toBe(768);
-    });
-
-    it('should use defaults for optional config', () => {
-      const service = createEmbeddingService({ apiKey: 'test-key' });
-      expect(service.getModel()).toBe('text-embedding-3-small');
-      expect(service.getDimensions()).toBe(1536);
     });
   });
 

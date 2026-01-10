@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { PrivacyFilter, createFilterContext, defaultPrivacyFilter } from '../../src/core/privacy-filter.js';
+import { createPrivacyFilter, createFilterContext, defaultPrivacyFilter, type PrivacyFilter } from '../../src/core/privacy-filter.js';
 
 describe('PrivacyFilter', () => {
   let filter: PrivacyFilter;
 
   beforeEach(() => {
-    filter = new PrivacyFilter();
+    filter = createPrivacyFilter();
   });
 
   describe('API Keys', () => {
