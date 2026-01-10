@@ -8,9 +8,9 @@ describe('LocalStore', () => {
   let store: LocalStore;
   let tempDir: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     tempDir = mkdtempSync(join(tmpdir(), 'fixhive-test-'));
-    store = createLocalStore(tempDir);
+    store = await createLocalStore(tempDir);
   });
 
   afterEach(() => {
