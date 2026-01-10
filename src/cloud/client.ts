@@ -3,7 +3,7 @@
  * Supabase client for cloud knowledge base operations
  */
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import type {
   CloudKnowledgeEntry,
   SearchRequest,
@@ -16,6 +16,28 @@ import type {
 import { EmbeddingService } from './embedding.js';
 import { generateContributorId } from '../core/hash.js';
 
+// Lazy import for Bun compatibility
+let createClient: typeof import('@supabase/supabase-js').createClient;
+
+async function getCreateClient() {
+  if (!createClient) {
+    const supabase = await import('@supabase/supabase-js');
+    createClient = supabase.createClient;
+  }
+  return createClient;
+}
+
+/**
+ * Cloud Client Configuration
+ */
+export interface CloudClientConfig {
+  supabaseUrl: string;
+  supabaseAnonKey: string;
+  openaiApiKey?: string;
+  contributorId?: string;
+  similarityThreshold?: number;
+}
+
 /**
  * Cloud Client Class
  * Manages communication with Supabase cloud database
@@ -26,30 +48,40 @@ export class CloudClient {
   private contributorId: string;
   private similarityThreshold: number;
 
-  constructor(config: {
-    supabaseUrl: string;
-    supabaseAnonKey: string;
-    openaiApiKey?: string;
-    contributorId?: string;
-    similarityThreshold?: number;
-  }) {
-    // Initialize Supabase client
-    this.supabase = createClient(config.supabaseUrl, config.supabaseAnonKey);
+  private constructor(
+    supabase: SupabaseClient,
+    embedding: EmbeddingService | null,
+    contributorId: string,
+    similarityThreshold: number
+  ) {
+    this.supabase = supabase;
+    this.embedding = embedding;
+    this.contributorId = contributorId;
+    this.similarityThreshold = similarityThreshold;
+  }
 
-    // Initialize embedding service (optional, for semantic search)
+  /**
+   * Create a CloudClient instance (async factory for Bun compatibility)
+   */
+  static async create(config: CloudClientConfig): Promise<CloudClient> {
+    // Dynamic import for Bun compatibility
+    const createClientFn = await getCreateClient();
+    const supabase = createClientFn(config.supabaseUrl, config.supabaseAnonKey);
+
+    // Initialize embedding service (optional)
+    let embedding: EmbeddingService | null = null;
     if (config.openaiApiKey) {
       try {
-        this.embedding = new EmbeddingService(config.openaiApiKey);
+        embedding = new EmbeddingService(config.openaiApiKey);
       } catch (err) {
         console.warn('[FixHive] Failed to initialize embedding service:', err);
-        this.embedding = null;
       }
-    } else {
-      this.embedding = null;
     }
 
-    this.contributorId = config.contributorId || generateContributorId();
-    this.similarityThreshold = config.similarityThreshold || 0.7;
+    const contributorId = config.contributorId || generateContributorId();
+    const similarityThreshold = config.similarityThreshold || 0.7;
+
+    return new CloudClient(supabase, embedding, contributorId, similarityThreshold);
   }
 
   /**
@@ -374,14 +406,10 @@ export class CloudClient {
 }
 
 /**
- * Create cloud client with config
+ * Create cloud client with config (async for Bun compatibility)
  */
-export function createCloudClient(config: {
-  supabaseUrl: string;
-  supabaseAnonKey: string;
-  openaiApiKey?: string;
-  contributorId?: string;
-  similarityThreshold?: number;
-}): CloudClient {
-  return new CloudClient(config);
+export async function createCloudClient(
+  config: CloudClientConfig
+): Promise<CloudClient> {
+  return CloudClient.create(config);
 }

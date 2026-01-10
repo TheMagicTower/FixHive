@@ -48,7 +48,7 @@ export const FixHivePlugin: Plugin = async (ctx) => {
   let cloudClient: CloudClient | null = null;
   if (config.supabaseUrl && config.supabaseAnonKey) {
     try {
-      cloudClient = new CloudClient({
+      cloudClient = await CloudClient.create({
         supabaseUrl: config.supabaseUrl,
         supabaseAnonKey: config.supabaseAnonKey,
         openaiApiKey: config.openaiApiKey,
