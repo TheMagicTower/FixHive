@@ -1,6 +1,6 @@
 {
   "name": "@the-magic-tower/fixhive-opencode-plugin",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "description": "Community-based error knowledge sharing for OpenCode",
   "type": "module",
   "main": "dist/index.js",
@@ -44,7 +44,7 @@
     "@opencode-ai/plugin": "^1.1.1"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.45.0",
+    "@supabase/supabase-js": "2.43.2",
     "better-sqlite3": "^12.5.0",
     "openai": "^6.16.0",
     "uuid": "^13.0.0",
