@@ -1,9 +1,9 @@
 /**
  * FixHive Local Store
  * SQLite-based local storage for error records and caching
+ * Automatically uses bun:sqlite for Bun runtime, better-sqlite3 for Node.js
  */
 
-import Database from 'better-sqlite3';
 import { v4 as uuidv4 } from 'uuid';
 import { mkdirSync, existsSync } from 'fs';
 import { dirname } from 'path';
@@ -15,6 +15,74 @@ import type {
 } from '../types/index.js';
 import { generateErrorFingerprint } from '../core/hash.js';
 import { runMigrations } from './migrations.js';
+
+/**
+ * Detect if running in Bun runtime
+ */
+declare const Bun: unknown;
+const isBun = typeof Bun !== 'undefined';
+
+/**
+ * Unified database interface for both Bun and Node.js
+ */
+interface UnifiedDatabase {
+  exec(sql: string): void;
+  prepare(sql: string): UnifiedStatement;
+  close(): void;
+}
+
+interface UnifiedStatement {
+  run(...params: unknown[]): { changes: number };
+  get(...params: unknown[]): Record<string, unknown> | undefined;
+  all(...params: unknown[]): Record<string, unknown>[];
+}
+
+/**
+ * Create a database instance using the appropriate SQLite implementation
+ */
+async function createDatabase(dbPath: string): Promise<UnifiedDatabase> {
+  if (isBun) {
+    // Use bun:sqlite
+    const { Database } = await import('bun:sqlite');
+    const db = new Database(dbPath, { create: true });
+
+    return {
+      exec: (sql: string) => db.exec(sql),
+      prepare: (sql: string) => {
+        const stmt = db.prepare(sql);
+        return {
+          run: (...params: unknown[]) => {
+            stmt.run(...params);
+            return { changes: db.changes };
+          },
+          get: (...params: unknown[]) => stmt.get(...params) as Record<string, unknown> | undefined,
+          all: (...params: unknown[]) => stmt.all(...params) as Record<string, unknown>[],
+        };
+      },
+      close: () => db.close(),
+    };
+  } else {
+    // Use better-sqlite3 for Node.js
+    const BetterSqlite3 = (await import('better-sqlite3')).default;
+    const db = new BetterSqlite3(dbPath);
+
+    return {
+      exec: (sql: string) => db.exec(sql),
+      prepare: (sql: string) => {
+        const stmt = db.prepare(sql);
+        return {
+          run: (...params: unknown[]) => {
+            const result = stmt.run(...params);
+            return { changes: result.changes };
+          },
+          get: (...params: unknown[]) => stmt.get(...params) as Record<string, unknown> | undefined,
+          all: (...params: unknown[]) => stmt.all(...params) as Record<string, unknown>[],
+        };
+      },
+      close: () => db.close(),
+    };
+  }
+}
 
 /**
  * Allowed stat column names for incrementStat (whitelist to prevent SQL injection)
@@ -45,7 +113,7 @@ export interface LocalStore {
   getPreference(key: string): string | null;
   setPreference(key: string, value: string): void;
   close(): void;
-  getDatabase(): Database.Database;
+  getDatabase(): UnifiedDatabase;
 }
 
 /**
@@ -76,8 +144,9 @@ function rowToRecord(row: Record<string, unknown>): LocalErrorRecord {
 /**
  * Create a LocalStore instance
  * Factory function pattern to avoid ES6 class issues with Bun
+ * Automatically uses bun:sqlite for Bun runtime, better-sqlite3 for Node.js
  */
-export function createLocalStore(projectDirectory: string): LocalStore {
+export async function createLocalStore(projectDirectory: string): Promise<LocalStore> {
   const dbPath = `${projectDirectory}/.fixhive/fixhive.db`;
 
   // Ensure directory exists
@@ -86,10 +155,10 @@ export function createLocalStore(projectDirectory: string): LocalStore {
     mkdirSync(dir, { recursive: true });
   }
 
-  // Initialize database
-  const db = new Database(dbPath);
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
+  // Initialize database (bun:sqlite or better-sqlite3 based on runtime)
+  const db = await createDatabase(dbPath);
+  db.exec('PRAGMA journal_mode = WAL');
+  db.exec('PRAGMA foreign_keys = ON');
 
   // Run migrations
   runMigrations(db);
@@ -105,6 +174,36 @@ export function createLocalStore(projectDirectory: string): LocalStore {
     }
     const stmt = db.prepare(`UPDATE usage_stats SET ${stat} = ${stat} + 1 WHERE id = 1`);
     stmt.run();
+  }
+
+  // Define helper functions to avoid `this` issues in async context
+  function getErrorById(id: string): LocalErrorRecord | null {
+    const stmt = db.prepare('SELECT * FROM error_records WHERE id = ?');
+    const row = stmt.get(id) as Record<string, unknown> | undefined;
+    return row ? rowToRecord(row) : null;
+  }
+
+  function getSessionErrors(
+    sessionId: string,
+    options?: { status?: ErrorStatus; limit?: number }
+  ): LocalErrorRecord[] {
+    let query = 'SELECT * FROM error_records WHERE session_id = ?';
+    const params: (string | number)[] = [sessionId];
+
+    if (options?.status) {
+      query += ' AND status = ?';
+      params.push(options.status);
+    }
+
+    query += ' ORDER BY created_at DESC';
+
+    if (options?.limit) {
+      query += ' LIMIT ?';
+      params.push(options.limit);
+    }
+
+    const stmt = db.prepare(query);
+    return (stmt.all(...params) as Record<string, unknown>[]).map((row) => rowToRecord(row));
   }
 
   return {
@@ -123,71 +222,36 @@ export function createLocalStore(projectDirectory: string): LocalStore {
         INSERT INTO error_records (
           id, error_hash, error_type, error_message, error_stack,
           language, framework, tool_name, tool_input, session_id, status
-        ) VALUES (
-          @id, @errorHash, @errorType, @errorMessage, @errorStack,
-          @language, @framework, @toolName, @toolInput, @sessionId, 'unresolved'
-        )
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unresolved')
       `);
 
-      stmt.run({
+      stmt.run(
         id,
         errorHash,
-        errorType: data.errorType,
-        errorMessage: data.errorMessage,
-        errorStack: data.errorStack || null,
-        language: data.language || null,
-        framework: data.framework || null,
-        toolName: data.toolName,
-        toolInput: JSON.stringify(data.toolInput),
-        sessionId: data.sessionId,
-      });
+        data.errorType,
+        data.errorMessage,
+        data.errorStack || null,
+        data.language || null,
+        data.framework || null,
+        data.toolName,
+        JSON.stringify(data.toolInput),
+        data.sessionId
+      );
 
       // Update stats
       incrementStat('total_errors');
 
-      return this.getErrorById(id)!;
+      return getErrorById(id)!;
     },
 
-    /**
-     * Get error record by ID
-     */
-    getErrorById(id: string): LocalErrorRecord | null {
-      const stmt = db.prepare('SELECT * FROM error_records WHERE id = ?');
-      const row = stmt.get(id) as Record<string, unknown> | undefined;
-      return row ? rowToRecord(row) : null;
-    },
-
-    /**
-     * Get errors by session
-     */
-    getSessionErrors(
-      sessionId: string,
-      options?: { status?: ErrorStatus; limit?: number }
-    ): LocalErrorRecord[] {
-      let query = 'SELECT * FROM error_records WHERE session_id = ?';
-      const params: (string | number)[] = [sessionId];
-
-      if (options?.status) {
-        query += ' AND status = ?';
-        params.push(options.status);
-      }
-
-      query += ' ORDER BY created_at DESC';
-
-      if (options?.limit) {
-        query += ' LIMIT ?';
-        params.push(options.limit);
-      }
-
-      const stmt = db.prepare(query);
-      return (stmt.all(...params) as Record<string, unknown>[]).map((row) => rowToRecord(row));
-    },
+    getErrorById,
+    getSessionErrors,
 
     /**
      * Get unresolved errors for a session
      */
     getUnresolvedErrors(sessionId: string): LocalErrorRecord[] {
-      return this.getSessionErrors(sessionId, { status: 'unresolved' });
+      return getSessionErrors(sessionId, { status: 'unresolved' });
     },
 
     /**
@@ -220,7 +284,7 @@ export function createLocalStore(projectDirectory: string): LocalStore {
 
       if (result.changes > 0) {
         incrementStat('resolved_errors');
-        return this.getErrorById(id);
+        return getErrorById(id);
       }
 
       return null;
@@ -360,7 +424,7 @@ export function createLocalStore(projectDirectory: string): LocalStore {
     /**
      * Get database for advanced queries
      */
-    getDatabase(): Database.Database {
+    getDatabase(): UnifiedDatabase {
       return db;
     },
   };

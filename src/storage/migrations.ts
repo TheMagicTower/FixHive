@@ -3,12 +3,22 @@
  * SQLite schema setup and migrations
  */
 
-import type Database from 'better-sqlite3';
+/**
+ * Unified database interface for migrations
+ * Works with both bun:sqlite and better-sqlite3
+ */
+interface MigrationDatabase {
+  exec(sql: string): void;
+  prepare(sql: string): {
+    all(...params: unknown[]): Record<string, unknown>[];
+    run(...params: unknown[]): { changes: number };
+  };
+}
 
 /**
  * Run all migrations on the database
  */
-export function runMigrations(db: Database.Database): void {
+export function runMigrations(db: MigrationDatabase): void {
   // Create migrations table
   db.exec(`
     CREATE TABLE IF NOT EXISTS migrations (

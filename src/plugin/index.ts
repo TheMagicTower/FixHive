@@ -49,7 +49,7 @@ export const FixHivePlugin: Plugin = async (ctx) => {
   console.log('[FixHive:DEBUG] Step 5: Creating error detector');
   const errorDetector = createErrorDetector(privacyFilter);
   console.log('[FixHive:DEBUG] Step 6: Creating local store');
-  const localStore = createLocalStore(ctx.directory);
+  const localStore = await createLocalStore(ctx.directory);
   console.log('[FixHive:DEBUG] Step 7: Local store created');
 
   // Initialize cloud client if configured
