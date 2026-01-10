@@ -1,6 +1,6 @@
 {
   "name": "@the-magic-tower/fixhive-opencode-plugin",
-  "version": "0.1.22",
+  "version": "0.1.23",
   "description": "Community-based error knowledge sharing for OpenCode",
   "type": "module",
   "main": "dist/index.js",
@@ -15,16 +15,14 @@
     "dist"
   ],
   "scripts": {
-    "build": "bun run build:bun && bun run build:types",
-    "build:bun": "bun build src/index.ts --outdir dist --format esm --target node --external @supabase/supabase-js --external better-sqlite3 --external openai --external uuid --external @opencode-ai/plugin --external zod",
-    "build:types": "tsc --emitDeclarationOnly --declaration --outDir dist",
-    "build:tsup": "tsup src/index.ts --format esm --dts --clean --target esnext --external @supabase/supabase-js --external better-sqlite3 --external openai --external uuid --external @opencode-ai/plugin --external zod",
-    "dev": "bun build src/index.ts --outdir dist --format esm --target bun --watch --external @supabase/supabase-js --external better-sqlite3 --external openai --external uuid --external @opencode-ai/plugin --external zod",
+    "build": "tsup",
+    "build:legacy": "bun build src/index.ts --outdir dist --format esm --target node --external @supabase/supabase-js --external better-sqlite3 --external openai --external uuid --external @opencode-ai/plugin --external zod && tsc --emitDeclarationOnly --declaration --outDir dist",
+    "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --ext .ts",
     "test": "vitest",
     "test:coverage": "vitest --coverage",
-    "prepublishOnly": "bun run build"
+    "prepublishOnly": "npm run build"
   },
   "keywords": [
     "opencode",
