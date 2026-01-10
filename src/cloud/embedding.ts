@@ -3,7 +3,7 @@
  * Generates text embeddings for semantic search using OpenAI
  */
 
-import OpenAI from 'openai';
+import { OpenAI } from 'openai';
 
 const DEFAULT_MODEL = 'text-embedding-3-small';
 const DEFAULT_DIMENSIONS = 1536;

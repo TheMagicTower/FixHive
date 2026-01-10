@@ -5,7 +5,7 @@ import { createEmbeddingService, cosineSimilarity, type EmbeddingService } from 
 // Mock returns embeddings based on input array length for batch support
 vi.mock('openai', () => {
   return {
-    default: class MockOpenAI {
+    OpenAI: class MockOpenAI {
       embeddings = {
         create: vi.fn().mockImplementation((params: { input: string | string[] }) => {
           const inputCount = Array.isArray(params?.input) ? params.input.length : 1;
