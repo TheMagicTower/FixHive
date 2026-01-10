@@ -45,17 +45,37 @@ npm install @the-magic-tower/fixhive-opencode-plugin
 
 ## 빠른 시작
 
-OpenCode 설정 파일(`opencode.config.ts`)에 추가:
+### 1. 패키지 설치
 
-```typescript
-import FixHivePlugin from '@the-magic-tower/fixhive-opencode-plugin';
+```bash
+npm install @the-magic-tower/fixhive-opencode-plugin
+```
 
-export default {
-  plugins: [FixHivePlugin],
-};
+### 2. OpenCode 설정 파일(`opencode.json`)에 추가
+
+```json
+{
+  "plugins": [
+    "@the-magic-tower/fixhive-opencode-plugin"
+  ]
+}
+```
+
+### 3. OpenCode 실행
+
+```bash
+opencode
 ```
 
 **끝입니다!** FixHive는 기본적으로 커뮤니티 지식 베이스에 연결됩니다. 환경 변수 설정이 필요 없습니다.
+
+플러그인이 정상 로드되면 다음 로그가 출력됩니다:
+```
+[FixHive] Plugin loaded
+[FixHive] Project: /your/project/path
+[FixHive] Cloud: enabled
+[FixHive] Ready - use fixhive_stats to verify
+```
 
 ## 작동 원리
 
