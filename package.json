@@ -1,6 +1,6 @@
 {
   "name": "@the-magic-tower/fixhive-opencode-plugin",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "Community-based error knowledge sharing for OpenCode",
   "type": "module",
   "main": "dist/index.js",
@@ -15,7 +15,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup src/index.ts --format esm --dts --clean --external @supabase/supabase-js --external better-sqlite3 --external openai --external uuid",
+    "build": "tsup src/index.ts --format esm --dts --clean --target esnext --external @supabase/supabase-js --external better-sqlite3 --external openai --external uuid --external @opencode-ai/plugin --external zod",
     "build:dts": "tsup src/index.ts --format esm --dts --clean",
     "dev": "tsup src/index.ts --format esm --watch",
     "typecheck": "tsc --noEmit",

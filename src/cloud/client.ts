@@ -33,10 +33,21 @@ export class CloudClient {
     contributorId?: string;
     similarityThreshold?: number;
   }) {
+    // Initialize Supabase client
     this.supabase = createClient(config.supabaseUrl, config.supabaseAnonKey);
-    this.embedding = config.openaiApiKey
-      ? new EmbeddingService(config.openaiApiKey)
-      : null;
+
+    // Initialize embedding service (optional, for semantic search)
+    if (config.openaiApiKey) {
+      try {
+        this.embedding = new EmbeddingService(config.openaiApiKey);
+      } catch (err) {
+        console.warn('[FixHive] Failed to initialize embedding service:', err);
+        this.embedding = null;
+      }
+    } else {
+      this.embedding = null;
+    }
+
     this.contributorId = config.contributorId || generateContributorId();
     this.similarityThreshold = config.similarityThreshold || 0.7;
   }

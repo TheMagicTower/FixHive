@@ -47,13 +47,19 @@ export const FixHivePlugin: Plugin = async (ctx) => {
   // Initialize cloud client if configured
   let cloudClient: CloudClient | null = null;
   if (config.supabaseUrl && config.supabaseAnonKey) {
-    cloudClient = new CloudClient({
-      supabaseUrl: config.supabaseUrl,
-      supabaseAnonKey: config.supabaseAnonKey,
-      openaiApiKey: config.openaiApiKey,
-      contributorId: config.contributorId,
-      similarityThreshold: config.similarityThreshold,
-    });
+    try {
+      cloudClient = new CloudClient({
+        supabaseUrl: config.supabaseUrl,
+        supabaseAnonKey: config.supabaseAnonKey,
+        openaiApiKey: config.openaiApiKey,
+        contributorId: config.contributorId,
+        similarityThreshold: config.similarityThreshold,
+      });
+    } catch (err) {
+      console.error('[FixHive] Failed to initialize cloud client:', err);
+      console.error('[FixHive] Falling back to offline mode');
+      // Continue with null cloudClient (offline mode)
+    }
   }
 
   // Plugin context (shared state)
