@@ -13,6 +13,8 @@
 
 > OpenCode向けコミュニティベースのエラー知識共有システム
 
+**最新版: v0.1.29** - Bunランタイム互換性の問題を修正。プラグインがOpenCodeで正常に動作するようになりました。
+
 FixHiveは、開発セッション中にエラーを自動的にキャプチャし、コミュニティナレッジベースからソリューションを検索し、解決したエラーを他の開発者と共有するOpenCodeプラグインです。
 
 ## 機能
@@ -113,13 +115,22 @@ FIXHIVE_SUPABASE_KEY=your-anon-key
 FixHive Plugin
 ├── Error Detection（tool.execute.afterフック）
 ├── Privacy Filter（機密データを除去）
-├── Local Storage（SQLite）
+├── Local Storage（SQLite - Bun/Node.js）
 │   ├── error_records
 │   └── query_cache
 └── Cloud Client（Supabase + pgvector）
     ├── knowledge_entries
     └── usage_logs
 ```
+
+### ランタイム互換性
+
+FixHiveはランタイム環境を自動検出し、適切なSQLite実装を使用します：
+
+| ランタイム | SQLite実装 |
+|-----------|-----------|
+| Bun       | `bun:sqlite`（ネイティブ） |
+| Node.js   | `better-sqlite3` |
 
 ## プライバシー
 
@@ -152,9 +163,41 @@ npm run typecheck
 npm test
 ```
 
+## トラブルシューティング
+
+### プラグインの動作確認
+
+プラグインが正常にロードされると、以下が表示されます：
+```
+[FixHive] Plugin loaded
+[FixHive] Project: /your/project/path
+[FixHive] Cloud: enabled
+[FixHive] Detected: typescript
+[FixHive] Ready - use fixhive_stats to verify
+```
+
+7つのツールが利用可能になります：
+- `fixhive_search`、`fixhive_resolve`、`fixhive_list`、`fixhive_vote`、`fixhive_report`、`fixhive_stats`、`fixhive_helpful`
+
+### プラグインがロードされない
+
+古いキャッシュバージョンがある場合は、キャッシュをクリアして再起動：
+```bash
+rm -rf ~/.cache/opencode/node_modules/@the-magic-tower*
+opencode
+```
+
 ## ライセンス
 
 MIT
+
+## 謝辞
+
+- [OpenCode](https://github.com/opencode-ai/opencode) - AIコーディングアシスタント
+- [Supabase](https://supabase.com) - Backend as a Service
+- [pgvector](https://github.com/pgvector/pgvector) - ベクトル類似度検索
+- [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) - 高速SQLiteバインディング（Node.js）
+- [Bun](https://bun.sh) - ネイティブSQLiteをサポートする高速JavaScriptランタイム
 
 ## コントリビュート
 

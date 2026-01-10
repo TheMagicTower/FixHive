@@ -13,6 +13,8 @@
 
 > Sistema de Compartición de Conocimiento de Errores Basado en la Comunidad para OpenCode
 
+**Última versión: v0.1.29** - Corregidos problemas de compatibilidad con Bun runtime. El plugin ahora funciona correctamente con OpenCode.
+
 FixHive es un plugin de OpenCode que captura automáticamente errores durante las sesiones de desarrollo, consulta una base de conocimientos comunitaria para encontrar soluciones y comparte errores resueltos con otros desarrolladores.
 
 ## Características
@@ -113,13 +115,22 @@ FIXHIVE_SUPABASE_KEY=your-anon-key
 FixHive Plugin
 ├── Error Detection (hook tool.execute.after)
 ├── Privacy Filter (redacta datos sensibles)
-├── Local Storage (SQLite)
+├── Local Storage (SQLite - Bun/Node.js)
 │   ├── error_records
 │   └── query_cache
 └── Cloud Client (Supabase + pgvector)
     ├── knowledge_entries
     └── usage_logs
 ```
+
+### Compatibilidad de Runtime
+
+FixHive detecta automáticamente el entorno de ejecución y usa la implementación SQLite apropiada:
+
+| Runtime | Implementación SQLite |
+|---------|----------------------|
+| Bun     | `bun:sqlite` (nativo) |
+| Node.js | `better-sqlite3` |
 
 ## Privacidad
 
@@ -152,9 +163,41 @@ npm run typecheck
 npm test
 ```
 
+## Solución de Problemas
+
+### Verificar que el Plugin Funciona
+
+Cuando el plugin se carga correctamente, verá:
+```
+[FixHive] Plugin loaded
+[FixHive] Project: /your/project/path
+[FixHive] Cloud: enabled
+[FixHive] Detected: typescript
+[FixHive] Ready - use fixhive_stats to verify
+```
+
+Las 7 herramientas deberían estar disponibles:
+- `fixhive_search`, `fixhive_resolve`, `fixhive_list`, `fixhive_vote`, `fixhive_report`, `fixhive_stats`, `fixhive_helpful`
+
+### El Plugin no se Carga
+
+Si tiene una versión anterior en caché, limpie la caché y reinicie:
+```bash
+rm -rf ~/.cache/opencode/node_modules/@the-magic-tower*
+opencode
+```
+
 ## Licencia
 
 MIT
+
+## Agradecimientos
+
+- [OpenCode](https://github.com/opencode-ai/opencode) - Asistente de programación IA
+- [Supabase](https://supabase.com) - Backend como Servicio
+- [pgvector](https://github.com/pgvector/pgvector) - Búsqueda de similitud vectorial
+- [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) - Enlaces SQLite rápidos (Node.js)
+- [Bun](https://bun.sh) - Runtime JavaScript rápido con soporte SQLite nativo
 
 ## Contribuir
 

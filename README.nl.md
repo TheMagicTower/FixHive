@@ -13,6 +13,8 @@
 
 > Community-gebaseerd Foutkennis Delen voor OpenCode
 
+**Laatste versie: v0.1.29** - Bun runtime compatibiliteitsproblemen opgelost. Plugin werkt nu correct met OpenCode.
+
 FixHive is een OpenCode-plugin die automatisch fouten vastlegt tijdens ontwikkelsessies, een community-kennisbank raadpleegt voor oplossingen en opgeloste fouten deelt met andere ontwikkelaars.
 
 ## Functies
@@ -113,13 +115,22 @@ FIXHIVE_SUPABASE_KEY=your-anon-key
 FixHive Plugin
 ├── Error Detection (tool.execute.after hook)
 ├── Privacy Filter (verwijdert gevoelige gegevens)
-├── Local Storage (SQLite)
+├── Local Storage (SQLite - Bun/Node.js)
 │   ├── error_records
 │   └── query_cache
 └── Cloud Client (Supabase + pgvector)
     ├── knowledge_entries
     └── usage_logs
 ```
+
+### Runtime Compatibiliteit
+
+FixHive detecteert automatisch de runtime-omgeving en gebruikt de juiste SQLite-implementatie:
+
+| Runtime | SQLite Implementatie |
+|---------|---------------------|
+| Bun     | `bun:sqlite` (natief) |
+| Node.js | `better-sqlite3` |
 
 ## Privacy
 
@@ -152,9 +163,41 @@ npm run typecheck
 npm test
 ```
 
+## Probleemoplossing
+
+### Controleer of Plugin Werkt
+
+Wanneer de plugin succesvol laadt, ziet u:
+```
+[FixHive] Plugin loaded
+[FixHive] Project: /your/project/path
+[FixHive] Cloud: enabled
+[FixHive] Detected: typescript
+[FixHive] Ready - use fixhive_stats to verify
+```
+
+Alle 7 tools moeten beschikbaar zijn:
+- `fixhive_search`, `fixhive_resolve`, `fixhive_list`, `fixhive_vote`, `fixhive_report`, `fixhive_stats`, `fixhive_helpful`
+
+### Plugin Laadt Niet
+
+Als u een oude gecachte versie hebt, wis de cache en herstart:
+```bash
+rm -rf ~/.cache/opencode/node_modules/@the-magic-tower*
+opencode
+```
+
 ## Licentie
 
 MIT
+
+## Dankbetuigingen
+
+- [OpenCode](https://github.com/opencode-ai/opencode) - AI-programmeerassistent
+- [Supabase](https://supabase.com) - Backend as a Service
+- [pgvector](https://github.com/pgvector/pgvector) - Vector-gelijkenis zoeken
+- [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) - Snelle SQLite-bindingen (Node.js)
+- [Bun](https://bun.sh) - Snelle JavaScript-runtime met native SQLite-ondersteuning
 
 ## Bijdragen
 

@@ -13,6 +13,8 @@
 
 > OpenCode 社区错误知识共享系统
 
+**最新版本: v0.1.29** - 修复 Bun 运行时兼容性问题。插件现已在 OpenCode 中正常运行。
+
 FixHive 是一个 OpenCode 插件，可在开发会话期间自动捕获错误，从社区知识库查询解决方案，并与其他开发者共享已解决的错误。
 
 ## 功能特性
@@ -113,13 +115,22 @@ FIXHIVE_SUPABASE_KEY=your-anon-key
 FixHive Plugin
 ├── Error Detection（tool.execute.after 钩子）
 ├── Privacy Filter（过滤敏感数据）
-├── Local Storage（SQLite）
+├── Local Storage（SQLite - Bun/Node.js）
 │   ├── error_records
 │   └── query_cache
 └── Cloud Client（Supabase + pgvector）
     ├── knowledge_entries
     └── usage_logs
 ```
+
+### 运行时兼容性
+
+FixHive 自动检测运行时环境并使用相应的 SQLite 实现：
+
+| 运行时 | SQLite 实现 |
+|--------|------------|
+| Bun    | `bun:sqlite`（原生） |
+| Node.js | `better-sqlite3` |
 
 ## 隐私保护
 
@@ -152,9 +163,41 @@ npm run typecheck
 npm test
 ```
 
+## 故障排除
+
+### 验证插件正常运行
+
+插件成功加载时，您将看到：
+```
+[FixHive] Plugin loaded
+[FixHive] Project: /your/project/path
+[FixHive] Cloud: enabled
+[FixHive] Detected: typescript
+[FixHive] Ready - use fixhive_stats to verify
+```
+
+所有 7 个工具应该可用：
+- `fixhive_search`、`fixhive_resolve`、`fixhive_list`、`fixhive_vote`、`fixhive_report`、`fixhive_stats`、`fixhive_helpful`
+
+### 插件无法加载
+
+如果有旧的缓存版本，清除缓存并重启：
+```bash
+rm -rf ~/.cache/opencode/node_modules/@the-magic-tower*
+opencode
+```
+
 ## 许可证
 
 MIT
+
+## 致谢
+
+- [OpenCode](https://github.com/opencode-ai/opencode) - AI 编程助手
+- [Supabase](https://supabase.com) - 后端即服务
+- [pgvector](https://github.com/pgvector/pgvector) - 向量相似度搜索
+- [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) - 快速 SQLite 绑定（Node.js）
+- [Bun](https://bun.sh) - 支持原生 SQLite 的快速 JavaScript 运行时
 
 ## 贡献
 

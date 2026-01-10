@@ -13,6 +13,8 @@
 
 > Partage de Connaissances d'Erreurs Basé sur la Communauté pour OpenCode
 
+**Dernière version : v0.1.29** - Correction des problèmes de compatibilité avec le runtime Bun. Le plugin fonctionne maintenant correctement avec OpenCode.
+
 FixHive est un plugin OpenCode qui capture automatiquement les erreurs pendant les sessions de développement, interroge une base de connaissances communautaire pour trouver des solutions et partage les erreurs résolues avec d'autres développeurs.
 
 ## Fonctionnalités
@@ -113,13 +115,22 @@ FIXHIVE_SUPABASE_KEY=your-anon-key
 FixHive Plugin
 ├── Error Detection (hook tool.execute.after)
 ├── Privacy Filter (supprime les données sensibles)
-├── Local Storage (SQLite)
+├── Local Storage (SQLite - Bun/Node.js)
 │   ├── error_records
 │   └── query_cache
 └── Cloud Client (Supabase + pgvector)
     ├── knowledge_entries
     └── usage_logs
 ```
+
+### Compatibilité Runtime
+
+FixHive détecte automatiquement l'environnement d'exécution et utilise l'implémentation SQLite appropriée :
+
+| Runtime | Implémentation SQLite |
+|---------|----------------------|
+| Bun     | `bun:sqlite` (natif) |
+| Node.js | `better-sqlite3` |
 
 ## Confidentialité
 
@@ -152,9 +163,41 @@ npm run typecheck
 npm test
 ```
 
+## Dépannage
+
+### Vérifier le Fonctionnement du Plugin
+
+Lorsque le plugin se charge avec succès, vous verrez :
+```
+[FixHive] Plugin loaded
+[FixHive] Project: /your/project/path
+[FixHive] Cloud: enabled
+[FixHive] Detected: typescript
+[FixHive] Ready - use fixhive_stats to verify
+```
+
+Les 7 outils devraient être disponibles :
+- `fixhive_search`, `fixhive_resolve`, `fixhive_list`, `fixhive_vote`, `fixhive_report`, `fixhive_stats`, `fixhive_helpful`
+
+### Le Plugin ne se Charge Pas
+
+Si vous avez une ancienne version en cache, videz le cache et redémarrez :
+```bash
+rm -rf ~/.cache/opencode/node_modules/@the-magic-tower*
+opencode
+```
+
 ## Licence
 
 MIT
+
+## Remerciements
+
+- [OpenCode](https://github.com/opencode-ai/opencode) - Assistant de programmation IA
+- [Supabase](https://supabase.com) - Backend en tant que Service
+- [pgvector](https://github.com/pgvector/pgvector) - Recherche de similarité vectorielle
+- [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) - Liaisons SQLite rapides (Node.js)
+- [Bun](https://bun.sh) - Runtime JavaScript rapide avec support SQLite natif
 
 ## Contribuer
 

@@ -26,6 +26,8 @@
 
 > 커뮤니티 기반 오류 지식 공유 시스템 - OpenCode 플러그인
 
+**최신: v0.1.29** - Bun 런타임 호환성 문제 해결. 플러그인이 OpenCode에서 정상 동작합니다.
+
 FixHive는 개발 세션 중 발생하는 오류를 자동으로 감지하고, 커뮤니티 지식 베이스에서 해결책을 검색하며, 해결된 오류를 다른 개발자들과 공유하는 OpenCode 플러그인입니다.
 
 ## 주요 기능
@@ -311,16 +313,26 @@ FIXHIVE_SUPABASE_KEY=your-anon-key
 │   │   ├── privacy-filter.ts # 민감 데이터 마스킹
 │   │   └── hash.ts           # 핑거프린팅 & 중복 검사
 │   ├── storage/
-│   │   ├── local-store.ts    # SQLite 로컬 저장소
+│   │   ├── local-store.ts    # SQLite 로컬 저장소 (Bun/Node.js)
 │   │   └── migrations.ts     # 데이터베이스 마이그레이션
 │   ├── cloud/
 │   │   ├── client.ts         # Supabase 클라이언트
 │   │   └── embedding.ts      # OpenAI 임베딩
 │   └── types/
-│       └── index.ts          # TypeScript 정의
+│       ├── index.ts          # TypeScript 정의
+│       └── bun-sqlite.d.ts   # Bun SQLite 타입 선언
 └── scripts/
     └── setup-supabase.sql    # 클라우드 스키마
 ```
+
+### 런타임 호환성
+
+FixHive는 런타임 환경을 자동 감지하여 적절한 SQLite 구현체를 사용합니다:
+
+| 런타임 | SQLite 구현체 |
+|--------|--------------|
+| Bun    | `bun:sqlite` (네이티브) |
+| Node.js | `better-sqlite3` |
 
 ## API 레퍼런스
 
@@ -391,11 +403,31 @@ const solutions = await cloud.searchSimilar({
 
 ## 문제 해결
 
+### 플러그인 정상 동작 확인
+
+플러그인이 정상 로드되면 다음 로그가 출력됩니다:
+```
+[FixHive] Plugin loaded
+[FixHive] Project: /your/project/path
+[FixHive] Cloud: enabled
+[FixHive] Detected: typescript
+[FixHive] Ready - use fixhive_stats to verify
+```
+
+7개의 도구가 사용 가능해야 합니다:
+- `fixhive_search`, `fixhive_resolve`, `fixhive_list`, `fixhive_vote`, `fixhive_report`, `fixhive_stats`, `fixhive_helpful`
+
 ### 플러그인이 로드되지 않음
 
 OpenCode v1.1.1 이상인지 확인:
 ```bash
 npm list @opencode-ai/plugin
+```
+
+오래된 캐시 버전이 있다면 캐시를 삭제하고 재시작:
+```bash
+rm -rf ~/.cache/opencode/node_modules/@the-magic-tower*
+opencode
 ```
 
 ### 솔루션을 찾을 수 없음
@@ -483,4 +515,5 @@ MIT - 자세한 내용은 [LICENSE](LICENSE)를 참조하세요.
 - [OpenCode](https://github.com/opencode-ai/opencode) - AI 코딩 어시스턴트
 - [Supabase](https://supabase.com) - Backend as a Service
 - [pgvector](https://github.com/pgvector/pgvector) - 벡터 유사도 검색
-- [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) - 빠른 SQLite 바인딩
+- [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) - 빠른 SQLite 바인딩 (Node.js)
+- [Bun](https://bun.sh) - 네이티브 SQLite 지원 빠른 JavaScript 런타임
