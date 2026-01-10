@@ -3,7 +3,6 @@
  * Supabase client for cloud knowledge base operations
  */
 
-import * as supabaseJs from '@supabase/supabase-js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type {
   CloudKnowledgeEntry,
@@ -16,6 +15,15 @@ import type {
 } from '../types/index.js';
 import { createEmbeddingService, type EmbeddingService } from './embedding.js';
 import { generateContributorId } from '../core/hash.js';
+
+/**
+ * Dynamic import helper for Supabase (Bun ESM/CJS interop)
+ */
+async function getSupabaseCreateClient(): Promise<typeof import('@supabase/supabase-js').createClient> {
+  const mod = await import('@supabase/supabase-js');
+  // Handle various export patterns
+  return mod.createClient || (mod as unknown as { default: { createClient: typeof mod.createClient } }).default?.createClient;
+}
 
 /**
  * Cloud Client Configuration
@@ -76,14 +84,15 @@ function mapToKnowledgeEntry(row: Record<string, unknown>): CloudKnowledgeEntry 
  * Factory function pattern to avoid ES6 class issues with Bun
  */
 export async function createCloudClient(config: CloudClientConfig): Promise<CloudClient> {
-  // Create Supabase client
-  const supabase: SupabaseClient = supabaseJs.createClient(config.supabaseUrl, config.supabaseAnonKey);
+  // Create Supabase client using dynamic import for Bun compatibility
+  const createClient = await getSupabaseCreateClient();
+  const supabase: SupabaseClient = createClient(config.supabaseUrl, config.supabaseAnonKey);
 
   // Initialize embedding service (optional)
   let embedding: EmbeddingService | null = null;
   if (config.openaiApiKey) {
     try {
-      embedding = createEmbeddingService({ apiKey: config.openaiApiKey });
+      embedding = await createEmbeddingService({ apiKey: config.openaiApiKey });
     } catch (err) {
       console.warn('[FixHive] Failed to initialize embedding service:', err);
     }

@@ -26,9 +26,9 @@ vi.mock('openai', () => {
 describe('EmbeddingService', () => {
   let service: EmbeddingService;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
-    service = createEmbeddingService({ apiKey: 'test-api-key' });
+    service = await createEmbeddingService({ apiKey: 'test-api-key' });
   });
 
   describe('createEmbeddingService', () => {
@@ -37,8 +37,8 @@ describe('EmbeddingService', () => {
       expect(service.getDimensions()).toBe(1536);
     });
 
-    it('should accept custom model and dimensions', () => {
-      const customService = createEmbeddingService({
+    it('should accept custom model and dimensions', async () => {
+      const customService = await createEmbeddingService({
         apiKey: 'key',
         model: 'text-embedding-ada-002',
         dimensions: 512,

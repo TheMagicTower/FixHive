@@ -3,11 +3,18 @@
  * Generates text embeddings for semantic search using OpenAI
  */
 
-import * as openaiModule from 'openai';
-
 const DEFAULT_MODEL = 'text-embedding-3-small';
 const DEFAULT_DIMENSIONS = 1536;
 const MAX_INPUT_LENGTH = 30000; // ~8000 tokens
+
+/**
+ * Dynamic import helper for OpenAI (Bun ESM/CJS interop)
+ */
+async function getOpenAIClass(): Promise<typeof import('openai').OpenAI> {
+  const mod = await import('openai');
+  // Handle various export patterns
+  return mod.OpenAI || (mod as unknown as { default: typeof mod.OpenAI }).default;
+}
 
 /**
  * EmbeddingService interface - defines all public methods
@@ -61,9 +68,9 @@ export function cosineSimilarity(a: number[], b: number[]): number {
  * Create an EmbeddingService instance
  * Factory function pattern to avoid ES6 class issues with Bun
  */
-export function createEmbeddingService(config: EmbeddingServiceConfig): EmbeddingService {
-  // Handle both default and named exports for CJS/ESM interop
-  const OpenAI = openaiModule.OpenAI || (openaiModule as unknown as { default: typeof openaiModule.OpenAI }).default;
+export async function createEmbeddingService(config: EmbeddingServiceConfig): Promise<EmbeddingService> {
+  // Dynamic import for Bun ESM/CJS interop
+  const OpenAI = await getOpenAIClass();
   const client = new OpenAI({ apiKey: config.apiKey });
   const model = config.model || DEFAULT_MODEL;
   const dimensions = config.dimensions || DEFAULT_DIMENSIONS;
@@ -144,7 +151,14 @@ export function createEmbeddingService(config: EmbeddingServiceConfig): Embeddin
       }
 
       const text = parts.join('\n');
-      return this.generate(text);
+      // Generate embedding directly (avoid this reference issues)
+      const truncated = truncateText(text);
+      const response = await client.embeddings.create({
+        model,
+        input: truncated,
+        dimensions,
+      });
+      return response.data[0].embedding;
     },
 
     /**

@@ -27,9 +27,9 @@ vi.mock('@supabase/supabase-js', () => ({
   },
 }));
 
-// Mock EmbeddingService - factory function mock
+// Mock EmbeddingService - factory function mock (async)
 vi.mock('../../src/cloud/embedding.js', () => ({
-  createEmbeddingService: vi.fn().mockReturnValue({
+  createEmbeddingService: vi.fn().mockResolvedValue({
     generate: vi.fn().mockResolvedValue(new Array(1536).fill(0.1)),
     generateBatch: vi.fn().mockResolvedValue([new Array(1536).fill(0.1)]),
     generateErrorEmbedding: vi.fn().mockResolvedValue(new Array(1536).fill(0.1)),
