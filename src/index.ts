@@ -24,39 +24,14 @@
  * ```
  */
 
-// Main plugin export
-export { FixHivePlugin, default } from './plugin/index.js';
+// NOTE: Do NOT export functions from main index.ts!
+// OpenCode treats ALL exports as plugin instances and calls them.
+// Only export the default plugin instance.
 
-// Core components - Factory functions
-export { createErrorDetector, defaultErrorDetector } from './core/error-detector.js';
-export { createPrivacyFilter, defaultPrivacyFilter, createFilterContext } from './core/privacy-filter.js';
-export {
-  sha256,
-  shortHash,
-  generateErrorFingerprint,
-  normalizeErrorContent,
-  generateContributorId,
-  generateSessionHash,
-  fingerprintsMatch,
-  calculateStringSimilarity,
-} from './core/hash.js';
+import FixHivePlugin from './plugin/index.js';
+export default FixHivePlugin;
 
-// Storage - Factory functions
-export { createLocalStore } from './storage/local-store.js';
-export { runMigrations } from './storage/migrations.js';
-
-// Cloud - Factory functions
-export { createCloudClient } from './cloud/client.js';
-export { createEmbeddingService, cosineSimilarity } from './cloud/embedding.js';
-
-// Legacy exports for backwards compatibility (deprecated)
-export { ErrorDetector } from './core/error-detector.js';
-export { PrivacyFilter } from './core/privacy-filter.js';
-export { LocalStore } from './storage/local-store.js';
-export { CloudClient } from './cloud/client.js';
-export { EmbeddingService } from './cloud/embedding.js';
-
-// Types
+// Types only (these are erased at runtime, so safe to export)
 export type {
   // Core types
   ErrorType,
