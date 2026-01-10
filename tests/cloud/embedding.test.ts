@@ -1,22 +1,25 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createEmbeddingService, cosineSimilarity, type EmbeddingService } from '../../src/cloud/embedding.js';
 
-// Mock OpenAI - vitest v4 requires class/function syntax for constructor mocks
+// Mock OpenAI - supports both default and named exports for CJS/ESM interop
 // Mock returns embeddings based on input array length for batch support
+// Note: vi.mock is hoisted, so the class must be defined inline inside the factory
 vi.mock('openai', () => {
+  const MockOpenAI = class {
+    embeddings = {
+      create: vi.fn().mockImplementation((params: { input: string | string[] }) => {
+        const inputCount = Array.isArray(params?.input) ? params.input.length : 1;
+        return Promise.resolve({
+          data: Array.from({ length: inputCount }, (_, i) => ({
+            embedding: new Array(1536).fill(0.1 * (i + 1)),
+          })),
+        });
+      }),
+    };
+  };
   return {
-    OpenAI: class MockOpenAI {
-      embeddings = {
-        create: vi.fn().mockImplementation((params: { input: string | string[] }) => {
-          const inputCount = Array.isArray(params?.input) ? params.input.length : 1;
-          return Promise.resolve({
-            data: Array.from({ length: inputCount }, (_, i) => ({
-              embedding: new Array(1536).fill(0.1 * (i + 1)),
-            })),
-          });
-        }),
-      };
-    },
+    OpenAI: MockOpenAI,
+    default: MockOpenAI,
   };
 });
 

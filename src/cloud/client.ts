@@ -3,7 +3,8 @@
  * Supabase client for cloud knowledge base operations
  */
 
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import * as supabaseJs from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import type {
   CloudKnowledgeEntry,
   SearchRequest,
@@ -76,7 +77,7 @@ function mapToKnowledgeEntry(row: Record<string, unknown>): CloudKnowledgeEntry 
  */
 export async function createCloudClient(config: CloudClientConfig): Promise<CloudClient> {
   // Create Supabase client
-  const supabase: SupabaseClient = createClient(config.supabaseUrl, config.supabaseAnonKey);
+  const supabase: SupabaseClient = supabaseJs.createClient(config.supabaseUrl, config.supabaseAnonKey);
 
   // Initialize embedding service (optional)
   let embedding: EmbeddingService | null = null;

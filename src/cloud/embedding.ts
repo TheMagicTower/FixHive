@@ -3,7 +3,7 @@
  * Generates text embeddings for semantic search using OpenAI
  */
 
-import { OpenAI } from 'openai';
+import * as openaiModule from 'openai';
 
 const DEFAULT_MODEL = 'text-embedding-3-small';
 const DEFAULT_DIMENSIONS = 1536;
@@ -62,6 +62,8 @@ export function cosineSimilarity(a: number[], b: number[]): number {
  * Factory function pattern to avoid ES6 class issues with Bun
  */
 export function createEmbeddingService(config: EmbeddingServiceConfig): EmbeddingService {
+  // Handle both default and named exports for CJS/ESM interop
+  const OpenAI = openaiModule.OpenAI || (openaiModule as unknown as { default: typeof openaiModule.OpenAI }).default;
   const client = new OpenAI({ apiKey: config.apiKey });
   const model = config.model || DEFAULT_MODEL;
   const dimensions = config.dimensions || DEFAULT_DIMENSIONS;
