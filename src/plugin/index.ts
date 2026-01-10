@@ -4,6 +4,9 @@
  */
 
 import type { Plugin } from '@opencode-ai/plugin';
+import { tool } from '@opencode-ai/plugin';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { ErrorDetector } from '../core/error-detector.js';
 import { PrivacyFilter, createFilterContext } from '../core/privacy-filter.js';
 import { LocalStore } from '../storage/local-store.js';
@@ -172,8 +175,6 @@ function createOfflineTools(
   _privacyFilter: PrivacyFilter,
   context: FixHiveContext
 ) {
-  const { tool } = require('@opencode-ai/plugin');
-
   return {
     fixhive_list: tool({
       description: 'List errors detected in the current session.',
@@ -251,9 +252,6 @@ function loadConfig(): FixHiveConfig {
  * Detect programming language from project
  */
 function detectLanguage(directory: string): Language | undefined {
-  const fs = require('fs');
-  const path = require('path');
-
   const indicators: [string, Language][] = [
     ['package.json', 'typescript'],
     ['tsconfig.json', 'typescript'],
@@ -268,7 +266,7 @@ function detectLanguage(directory: string): Language | undefined {
   ];
 
   for (const [file, lang] of indicators) {
-    if (fs.existsSync(path.join(directory, file))) {
+    if (existsSync(join(directory, file))) {
       return lang;
     }
   }
@@ -280,14 +278,11 @@ function detectLanguage(directory: string): Language | undefined {
  * Detect framework from project
  */
 function detectFramework(directory: string): string | undefined {
-  const fs = require('fs');
-  const path = require('path');
-
   // Check package.json for JS/TS projects
-  const pkgPath = path.join(directory, 'package.json');
-  if (fs.existsSync(pkgPath)) {
+  const pkgPath = join(directory, 'package.json');
+  if (existsSync(pkgPath)) {
     try {
-      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+      const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
       const deps = { ...pkg.dependencies, ...pkg.devDependencies };
 
       if (deps['next']) return 'nextjs';
@@ -303,10 +298,10 @@ function detectFramework(directory: string): string | undefined {
   }
 
   // Check for Python frameworks
-  const reqPath = path.join(directory, 'requirements.txt');
-  if (fs.existsSync(reqPath)) {
+  const reqPath = join(directory, 'requirements.txt');
+  if (existsSync(reqPath)) {
     try {
-      const content = fs.readFileSync(reqPath, 'utf-8');
+      const content = readFileSync(reqPath, 'utf-8');
       if (content.includes('django')) return 'django';
       if (content.includes('flask')) return 'flask';
       if (content.includes('fastapi')) return 'fastapi';

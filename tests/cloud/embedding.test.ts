@@ -1,16 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EmbeddingService, createEmbeddingService } from '../../src/cloud/embedding.js';
 
-// Mock OpenAI
+// Mock OpenAI - vitest v4 requires class/function syntax for constructor mocks
+// Mock returns embeddings based on input array length for batch support
 vi.mock('openai', () => {
   return {
-    default: vi.fn().mockImplementation(() => ({
-      embeddings: {
-        create: vi.fn().mockResolvedValue({
-          data: [{ embedding: new Array(1536).fill(0.1) }],
+    default: class MockOpenAI {
+      embeddings = {
+        create: vi.fn().mockImplementation((params: { input: string | string[] }) => {
+          const inputCount = Array.isArray(params?.input) ? params.input.length : 1;
+          return Promise.resolve({
+            data: Array.from({ length: inputCount }, (_, i) => ({
+              embedding: new Array(1536).fill(0.1 * (i + 1)),
+            })),
+          });
         }),
-      },
-    })),
+      };
+    },
   };
 });
 
@@ -51,22 +57,12 @@ describe('EmbeddingService', () => {
 
   describe('generateBatch', () => {
     it('should generate embeddings for multiple texts', async () => {
-      // Update mock for batch
-      const OpenAI = (await import('openai')).default;
-      (OpenAI as any).mockImplementation(() => ({
-        embeddings: {
-          create: vi.fn().mockResolvedValue({
-            data: [
-              { embedding: new Array(1536).fill(0.1) },
-              { embedding: new Array(1536).fill(0.2) },
-            ],
-          }),
-        },
-      }));
-
-      const batchService = new EmbeddingService('test-key');
-      const embeddings = await batchService.generateBatch(['Text 1', 'Text 2']);
+      // Mock now automatically handles batch by returning embeddings based on input length
+      const embeddings = await service.generateBatch(['Text 1', 'Text 2']);
       expect(embeddings).toHaveLength(2);
+      // First embedding should have 0.1 values, second should have 0.2 values
+      expect(embeddings[0][0]).toBe(0.1);
+      expect(embeddings[1][0]).toBe(0.2);
     });
   });
 

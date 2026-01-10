@@ -19,17 +19,19 @@ const createChainableMock = (finalResult: unknown) => {
 };
 
 vi.mock('@supabase/supabase-js', () => ({
-  createClient: vi.fn(() => ({
-    rpc: mockRpc,
-    from: mockFrom,
-  })),
+  createClient: function mockCreateClient() {
+    return {
+      rpc: mockRpc,
+      from: mockFrom,
+    };
+  },
 }));
 
-// Mock EmbeddingService
+// Mock EmbeddingService - vitest v4 requires class/function syntax
 vi.mock('../../src/cloud/embedding.js', () => ({
-  EmbeddingService: vi.fn().mockImplementation(() => ({
-    generate: vi.fn().mockResolvedValue(new Array(1536).fill(0.1)),
-  })),
+  EmbeddingService: class MockEmbeddingService {
+    generate = vi.fn().mockResolvedValue(new Array(1536).fill(0.1));
+  },
 }));
 
 describe('CloudClient', () => {
