@@ -1,6 +1,6 @@
 {
   "name": "@the-magic-tower/fixhive-opencode-plugin",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "description": "Community-based error knowledge sharing for OpenCode",
   "type": "module",
   "main": "dist/index.js",
@@ -15,14 +15,16 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup src/index.ts --format esm --dts --clean --target esnext --external @supabase/supabase-js --external better-sqlite3 --external openai --external uuid --external @opencode-ai/plugin --external zod",
-    "build:dts": "tsup src/index.ts --format esm --dts --clean",
-    "dev": "tsup src/index.ts --format esm --watch",
+    "build": "bun run build:bun && bun run build:types",
+    "build:bun": "bun build src/index.ts --outdir dist --format esm --target bun --external @supabase/supabase-js --external better-sqlite3 --external openai --external uuid --external @opencode-ai/plugin --external zod",
+    "build:types": "tsc --emitDeclarationOnly --declaration --outDir dist",
+    "build:tsup": "tsup src/index.ts --format esm --dts --clean --target esnext --external @supabase/supabase-js --external better-sqlite3 --external openai --external uuid --external @opencode-ai/plugin --external zod",
+    "dev": "bun build src/index.ts --outdir dist --format esm --target bun --watch --external @supabase/supabase-js --external better-sqlite3 --external openai --external uuid --external @opencode-ai/plugin --external zod",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --ext .ts",
     "test": "vitest",
     "test:coverage": "vitest --coverage",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "bun run build"
   },
   "keywords": [
     "opencode",
