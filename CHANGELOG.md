@@ -8,6 +8,42 @@
 
 ---
 
+## [0.1.29] - 2026-01-10
+
+### Fixed (수정)
+- **Bun 런타임 호환성 문제 해결**
+  - `TypeError: fn3 is not a function` 오류 수정
+    - 원인: OpenCode가 모든 export를 플러그인 인스턴스로 취급하여 호출
+    - 해결: `src/index.ts`에서 default export만 노출하도록 변경
+  - `better-sqlite3 is not yet supported in Bun` 오류 수정
+    - 원인: better-sqlite3 네이티브 Node.js 애드온이 Bun과 호환되지 않음
+    - 해결: 런타임 감지 후 `bun:sqlite` 또는 `better-sqlite3` 동적 선택
+
+### Changed (변경)
+- 빌드 시스템 변경: `tsup` → `bun build --target bun --format esm`
+- `@opencode-ai/plugin`, `zod`를 dependencies로 이동 (번들에 포함)
+- `better-sqlite3`만 external로 유지 (네이티브 모듈)
+- `createLocalStore`를 비동기 함수로 변경
+
+### Added (추가)
+- `src/types/bun-sqlite.d.ts` - Bun SQLite 타입 선언 추가
+- `UnifiedDatabase` 인터페이스 - 크로스 런타임 호환성 지원
+
+### Technical Details
+```typescript
+// 런타임 감지
+const isBun = typeof Bun !== 'undefined';
+
+// 동적 SQLite 선택
+if (isBun) {
+  const { Database } = await import('bun:sqlite');
+} else {
+  const BetterSqlite3 = (await import('better-sqlite3')).default;
+}
+```
+
+---
+
 ## [0.1.6] - 2026-01-09
 
 ### Documentation (문서)

@@ -26,6 +26,8 @@
 
 > Community-based Error Knowledge Sharing for OpenCode
 
+**Latest: v0.1.29** - Bun runtime compatibility fixed. Plugin now works correctly with OpenCode.
+
 FixHive is an OpenCode plugin that automatically captures errors during development sessions, queries a community knowledge base for solutions, and shares resolved errors with other developers.
 
 ## Features
@@ -311,16 +313,26 @@ FIXHIVE_SUPABASE_KEY=your-anon-key
 │   │   ├── privacy-filter.ts # Sensitive data redaction
 │   │   └── hash.ts           # Fingerprinting & deduplication
 │   ├── storage/
-│   │   ├── local-store.ts    # SQLite local storage
+│   │   ├── local-store.ts    # SQLite local storage (Bun/Node.js)
 │   │   └── migrations.ts     # Database migrations
 │   ├── cloud/
 │   │   ├── client.ts         # Supabase client
 │   │   └── embedding.ts      # OpenAI embeddings
 │   └── types/
-│       └── index.ts          # TypeScript definitions
+│       ├── index.ts          # TypeScript definitions
+│       └── bun-sqlite.d.ts   # Bun SQLite type declarations
 └── scripts/
     └── setup-supabase.sql    # Cloud schema
 ```
+
+### Runtime Compatibility
+
+FixHive automatically detects the runtime environment and uses the appropriate SQLite implementation:
+
+| Runtime | SQLite Implementation |
+|---------|----------------------|
+| Bun     | `bun:sqlite` (native) |
+| Node.js | `better-sqlite3`     |
 
 ## API Reference
 
@@ -391,11 +403,31 @@ const solutions = await cloud.searchSimilar({
 
 ## Troubleshooting
 
+### Verify Plugin is Working
+
+When the plugin loads successfully, you'll see:
+```
+[FixHive] Plugin loaded
+[FixHive] Project: /your/project/path
+[FixHive] Cloud: enabled
+[FixHive] Detected: typescript
+[FixHive] Ready - use fixhive_stats to verify
+```
+
+All 7 tools should be available:
+- `fixhive_search`, `fixhive_resolve`, `fixhive_list`, `fixhive_vote`, `fixhive_report`, `fixhive_stats`, `fixhive_helpful`
+
 ### Plugin not loading
 
 Make sure you're using OpenCode v1.1.1 or later:
 ```bash
 npm list @opencode-ai/plugin
+```
+
+If you have an old cached version, clear the cache and restart:
+```bash
+rm -rf ~/.cache/opencode/node_modules/@the-magic-tower*
+opencode
 ```
 
 ### No solutions found
@@ -483,4 +515,5 @@ MIT - see [LICENSE](LICENSE) for details.
 - [OpenCode](https://github.com/opencode-ai/opencode) - AI coding assistant
 - [Supabase](https://supabase.com) - Backend as a Service
 - [pgvector](https://github.com/pgvector/pgvector) - Vector similarity search
-- [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) - Fast SQLite bindings
+- [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) - Fast SQLite bindings (Node.js)
+- [Bun](https://bun.sh) - Fast JavaScript runtime with native SQLite support
