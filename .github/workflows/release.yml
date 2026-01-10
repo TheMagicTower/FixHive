@@ -36,10 +36,27 @@ jobs:
       - name: Run tests
         run: npm test -- --run
 
+      - name: Check NPM_TOKEN
+        id: check_token
+        run: |
+          if [ -z "${{ secrets.NPM_TOKEN }}" ]; then
+            echo "NPM_TOKEN is not set. Skipping npm publish."
+            echo "skip_publish=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip_publish=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Publish to npm
+        if: steps.check_token.outputs.skip_publish != 'true'
         run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Skip publish notice
+        if: steps.check_token.outputs.skip_publish == 'true'
+        run: |
+          echo "::warning::NPM_TOKEN secret is not configured. Skipping npm publish."
+          echo "To enable npm publishing, add NPM_TOKEN to repository secrets."
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1

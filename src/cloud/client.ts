@@ -3,7 +3,7 @@
  * Supabase client for cloud knowledge base operations
  */
 
-import type { SupabaseClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type {
   CloudKnowledgeEntry,
   SearchRequest,
@@ -15,17 +15,6 @@ import type {
 } from '../types/index.js';
 import { EmbeddingService } from './embedding.js';
 import { generateContributorId } from '../core/hash.js';
-
-// Lazy import for Bun compatibility
-let createClient: typeof import('@supabase/supabase-js').createClient;
-
-async function getCreateClient() {
-  if (!createClient) {
-    const supabase = await import('@supabase/supabase-js');
-    createClient = supabase.createClient;
-  }
-  return createClient;
-}
 
 /**
  * Cloud Client Configuration
@@ -86,9 +75,8 @@ function mapToKnowledgeEntry(row: Record<string, unknown>): CloudKnowledgeEntry 
  * Factory function pattern to avoid ES6 class issues with Bun
  */
 export async function createCloudClient(config: CloudClientConfig): Promise<CloudClient> {
-  // Dynamic import for Bun compatibility
-  const createClientFn = await getCreateClient();
-  const supabase: SupabaseClient = createClientFn(config.supabaseUrl, config.supabaseAnonKey);
+  // Create Supabase client
+  const supabase: SupabaseClient = createClient(config.supabaseUrl, config.supabaseAnonKey);
 
   // Initialize embedding service (optional)
   let embedding: EmbeddingService | null = null;
