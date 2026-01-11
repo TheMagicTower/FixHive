@@ -295,10 +295,14 @@ CREATE POLICY "Usage logs are viewable by everyone"
 ON usage_logs FOR SELECT
 USING (true);
 
--- Anyone can insert usage logs
-CREATE POLICY "Anyone can insert usage logs"
+-- Anyone can insert usage logs (with validation)
+CREATE POLICY "Validated usage log inserts"
 ON usage_logs FOR INSERT
-WITH CHECK (true);
+WITH CHECK (
+    user_hash IS NOT NULL
+    AND trim(user_hash) != ''
+    AND action IN ('view', 'apply', 'upvote', 'downvote', 'report', 'helpful')
+);
 
 -- ===========================================
 -- Triggers
@@ -350,8 +354,15 @@ ALTER TABLE vote_records ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Vote records are viewable by everyone"
 ON vote_records FOR SELECT USING (true);
 
-CREATE POLICY "Anyone can insert vote records"
-ON vote_records FOR INSERT WITH CHECK (true);
+-- Anyone can insert vote records (with validation)
+CREATE POLICY "Validated vote record inserts"
+ON vote_records FOR INSERT
+WITH CHECK (
+    user_hash IS NOT NULL
+    AND trim(user_hash) != ''
+    AND vote_type IN ('up', 'down')
+    AND knowledge_id IS NOT NULL
+);
 
 -- ===========================================
 -- Security: Rate Limiting Function
