@@ -264,13 +264,28 @@ export async function createLocalStore(projectDirectory: string): Promise<LocalS
       return (stmt.all(limit) as Record<string, unknown>[]).map((row) => rowToRecord(row));
     },
 
-    /**
-     * Mark error as resolved
-     */
     markResolved(
       id: string,
       data: { resolution: string; resolutionCode?: string }
     ): LocalErrorRecord | null {
+      const record = getErrorById(id);
+
+      if (!record) {
+        return null;
+      }
+
+      if (record.status === 'resolved') {
+        console.log(`[FixHive:LocalStore] Error ${id.slice(0, 8)} already resolved, updating resolution...`);
+        const updateStmt = db.prepare(`
+          UPDATE error_records
+          SET resolution = ?,
+              resolution_code = ?
+          WHERE id = ?
+        `);
+        updateStmt.run(data.resolution, data.resolutionCode || null, id);
+        return getErrorById(id);
+      }
+
       const stmt = db.prepare(`
         UPDATE error_records
         SET status = 'resolved',
