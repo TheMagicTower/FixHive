@@ -138,6 +138,8 @@ RETURNS TABLE (
     similarity FLOAT
 )
 LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
 AS $$
 BEGIN
     RETURN QUERY
@@ -160,7 +162,7 @@ BEGIN
         ke.updated_at,
         ke.is_verified,
         1 - (ke.embedding <=> query_embedding) AS similarity
-    FROM knowledge_entries ke
+    FROM public.knowledge_entries ke
     WHERE
         ke.embedding IS NOT NULL
         AND 1 - (ke.embedding <=> query_embedding) > match_threshold
@@ -187,13 +189,15 @@ RETURNS TABLE (
     similarity_score FLOAT
 )
 LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
 AS $$
 DECLARE
     found_record RECORD;
 BEGIN
     -- First check by exact hash
     SELECT ke.id INTO found_record
-    FROM knowledge_entries ke
+    FROM public.knowledge_entries ke
     WHERE ke.error_hash = new_hash
     LIMIT 1;
 
@@ -207,7 +211,7 @@ BEGIN
         ke.id,
         1 - (ke.embedding <=> new_embedding) AS sim
     INTO found_record
-    FROM knowledge_entries ke
+    FROM public.knowledge_entries ke
     WHERE
         ke.embedding IS NOT NULL
         AND 1 - (ke.embedding <=> new_embedding) > similarity_threshold
@@ -231,14 +235,16 @@ CREATE OR REPLACE FUNCTION increment_vote(
 )
 RETURNS VOID
 LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
 AS $$
 BEGIN
     IF vote_type = 'upvotes' THEN
-        UPDATE knowledge_entries
+        UPDATE public.knowledge_entries
         SET upvotes = upvotes + 1, updated_at = NOW()
         WHERE id = entry_id;
     ELSIF vote_type = 'downvotes' THEN
-        UPDATE knowledge_entries
+        UPDATE public.knowledge_entries
         SET downvotes = downvotes + 1, updated_at = NOW()
         WHERE id = entry_id;
     END IF;
@@ -251,9 +257,11 @@ CREATE OR REPLACE FUNCTION increment_usage_count(
 )
 RETURNS VOID
 LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
 AS $$
 BEGIN
-    UPDATE knowledge_entries
+    UPDATE public.knowledge_entries
     SET usage_count = usage_count + 1, updated_at = NOW()
     WHERE id = entry_id;
 END;
@@ -299,6 +307,8 @@ WITH CHECK (true);
 CREATE OR REPLACE FUNCTION update_updated_at()
 RETURNS TRIGGER
 LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
 AS $$
 BEGIN
     NEW.updated_at = NOW();
@@ -349,6 +359,8 @@ ON vote_records FOR INSERT WITH CHECK (true);
 CREATE OR REPLACE FUNCTION check_insert_rate_limit(p_contributor_id TEXT)
 RETURNS BOOLEAN
 LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
 AS $$
 DECLARE
     hourly_count INTEGER;
@@ -356,7 +368,7 @@ DECLARE
 BEGIN
     -- 시간당 10개 제한
     SELECT COUNT(*) INTO hourly_count
-    FROM knowledge_entries
+    FROM public.knowledge_entries
     WHERE contributor_id = p_contributor_id
       AND created_at > NOW() - INTERVAL '1 hour';
 
@@ -366,7 +378,7 @@ BEGIN
 
     -- 일일 50개 제한
     SELECT COUNT(*) INTO daily_count
-    FROM knowledge_entries
+    FROM public.knowledge_entries
     WHERE contributor_id = p_contributor_id
       AND created_at > NOW() - INTERVAL '1 day';
 
@@ -392,6 +404,8 @@ WITH CHECK (check_insert_rate_limit(contributor_id));
 CREATE OR REPLACE FUNCTION validate_knowledge_entry()
 RETURNS TRIGGER
 LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
 AS $$
 BEGIN
     -- 필수 필드 검증
@@ -460,6 +474,8 @@ CREATE OR REPLACE FUNCTION safe_vote(
 )
 RETURNS JSONB
 LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
 AS $$
 DECLARE
     existing_vote TEXT;
@@ -471,7 +487,7 @@ BEGIN
 
     -- 기존 투표 확인
     SELECT vote_type INTO existing_vote
-    FROM vote_records
+    FROM public.vote_records
     WHERE knowledge_id = p_entry_id AND user_hash = p_user_hash;
 
     IF existing_vote IS NOT NULL THEN
@@ -479,16 +495,16 @@ BEGIN
             RETURN jsonb_build_object('success', false, 'error', 'Already voted');
         ELSE
             -- 투표 변경: 기존 투표 취소 후 새 투표
-            UPDATE vote_records
+            UPDATE public.vote_records
             SET vote_type = p_vote_type, created_at = NOW()
             WHERE knowledge_id = p_entry_id AND user_hash = p_user_hash;
 
             IF p_vote_type = 'up' THEN
-                UPDATE knowledge_entries
+                UPDATE public.knowledge_entries
                 SET upvotes = upvotes + 1, downvotes = GREATEST(downvotes - 1, 0)
                 WHERE id = p_entry_id;
             ELSE
-                UPDATE knowledge_entries
+                UPDATE public.knowledge_entries
                 SET downvotes = downvotes + 1, upvotes = GREATEST(upvotes - 1, 0)
                 WHERE id = p_entry_id;
             END IF;
@@ -498,14 +514,14 @@ BEGIN
     END IF;
 
     -- 새 투표 기록
-    INSERT INTO vote_records (knowledge_id, user_hash, vote_type)
+    INSERT INTO public.vote_records (knowledge_id, user_hash, vote_type)
     VALUES (p_entry_id, p_user_hash, p_vote_type);
 
     -- 카운트 업데이트
     IF p_vote_type = 'up' THEN
-        UPDATE knowledge_entries SET upvotes = upvotes + 1 WHERE id = p_entry_id;
+        UPDATE public.knowledge_entries SET upvotes = upvotes + 1 WHERE id = p_entry_id;
     ELSE
-        UPDATE knowledge_entries SET downvotes = downvotes + 1 WHERE id = p_entry_id;
+        UPDATE public.knowledge_entries SET downvotes = downvotes + 1 WHERE id = p_entry_id;
     END IF;
 
     RETURN jsonb_build_object('success', true, 'action', 'voted');
@@ -523,15 +539,17 @@ CREATE OR REPLACE FUNCTION report_entry(
 )
 RETURNS JSONB
 LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
 AS $$
 BEGIN
     -- 신고 횟수 증가
-    UPDATE knowledge_entries
+    UPDATE public.knowledge_entries
     SET report_count = report_count + 1
     WHERE id = p_entry_id;
 
     -- 로그 기록
-    INSERT INTO usage_logs (knowledge_id, action, user_hash)
+    INSERT INTO public.usage_logs (knowledge_id, action, user_hash)
     VALUES (p_entry_id, 'report', p_user_hash);
 
     RETURN jsonb_build_object('success', true);
