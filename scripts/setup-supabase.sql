@@ -2,18 +2,19 @@
 -- Run this script in your Supabase SQL Editor
 
 -- ===========================================
--- Enable Required Extensions
+-- Enable Required Extensions (in extensions schema)
 -- ===========================================
 
-CREATE EXTENSION IF NOT EXISTS vector;
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE SCHEMA IF NOT EXISTS extensions;
+CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA extensions;
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA extensions;
 
 -- ===========================================
 -- Main Knowledge Entries Table
 -- ===========================================
 
 CREATE TABLE IF NOT EXISTS knowledge_entries (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT extensions.uuid_generate_v4(),
 
     -- Error identification
     error_hash TEXT NOT NULL,
@@ -70,7 +71,7 @@ CREATE INDEX IF NOT EXISTS idx_knowledge_embedding ON knowledge_entries
 -- ===========================================
 
 CREATE TABLE IF NOT EXISTS usage_logs (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT extensions.uuid_generate_v4(),
     knowledge_id UUID REFERENCES knowledge_entries(id) ON DELETE SET NULL,
     action TEXT NOT NULL,  -- 'view', 'apply', 'upvote', 'downvote'
     user_hash TEXT NOT NULL,
@@ -86,7 +87,7 @@ CREATE INDEX IF NOT EXISTS idx_usage_created ON usage_logs(created_at DESC);
 -- ===========================================
 
 CREATE TABLE IF NOT EXISTS duplicate_candidates (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT extensions.uuid_generate_v4(),
     original_id UUID REFERENCES knowledge_entries(id) ON DELETE CASCADE,
     duplicate_id UUID REFERENCES knowledge_entries(id) ON DELETE CASCADE,
     similarity_score FLOAT NOT NULL,
@@ -333,7 +334,7 @@ CREATE TRIGGER knowledge_entries_updated_at
 -- ===========================================
 
 CREATE TABLE IF NOT EXISTS vote_records (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT extensions.uuid_generate_v4(),
     knowledge_id UUID REFERENCES knowledge_entries(id) ON DELETE CASCADE,
     user_hash TEXT NOT NULL,
     vote_type TEXT NOT NULL CHECK (vote_type IN ('up', 'down')),
