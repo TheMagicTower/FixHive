@@ -94,6 +94,17 @@ CREATE TABLE IF NOT EXISTS duplicate_candidates (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Enable RLS on duplicate_candidates (admin-only table)
+ALTER TABLE duplicate_candidates ENABLE ROW LEVEL SECURITY;
+
+-- Only service role can access duplicate_candidates (not exposed to public)
+-- No policies for anon = no public access
+CREATE POLICY "Service role full access to duplicate_candidates"
+ON duplicate_candidates FOR ALL
+TO service_role
+USING (true)
+WITH CHECK (true);
+
 -- ===========================================
 -- Functions
 -- ===========================================
