@@ -209,19 +209,28 @@ export async function createCloudClient(config: CloudClientConfig): Promise<Clou
     async uploadResolution(request: UploadRequest): Promise<UploadResponse> {
       const { errorRecord, resolution, resolutionCode, resolutionSteps } = request;
 
+      console.log(`[FixHive:Cloud] Starting upload for error: ${errorRecord.id.slice(0, 8)}`);
+
       // Generate embedding if available
       let embeddingData: number[] | null = null;
       if (embedding) {
         const embeddingText = `${errorRecord.errorMessage}\n${errorRecord.errorStack || ''}`;
+        console.log(`[FixHive:Cloud] Generating embedding for error...`);
         embeddingData = await embedding.generate(embeddingText);
+        console.log(`[FixHive:Cloud] Embedding generated: ${embeddingData ? embeddingData.length : 0} dims`);
+      } else {
+        console.log(`[FixHive:Cloud] No embedding service available - using text-only upload`);
       }
 
       // Check for duplicates
       if (embeddingData) {
+        console.log(`[FixHive:Cloud] Checking for duplicates...`);
         const duplicateCheck = await checkDuplicateInternal(errorRecord.errorHash, embeddingData);
+        console.log(`[FixHive:Cloud] Duplicate check: isDuplicate=${duplicateCheck.isDuplicate}, similarity=${duplicateCheck.similarityScore.toFixed(2)}`);
 
         if (duplicateCheck.isDuplicate && duplicateCheck.similarityScore > 0.95) {
           // Increment usage count on existing entry
+          console.log(`[FixHive:Cloud] Duplicate found (similarity > 0.95). Incrementing usage count on entry ${duplicateCheck.existingId}`);
           await supabase.rpc('increment_usage_count', {
             entry_id: duplicateCheck.existingId,
           });
@@ -236,6 +245,12 @@ export async function createCloudClient(config: CloudClientConfig): Promise<Clou
       }
 
       // Insert new entry
+      console.log(`[FixHive:Cloud] Inserting new knowledge entry...`);
+      console.log(`[FixHive:Cloud]   Hash: ${errorRecord.errorHash}`);
+      console.log(`[FixHive:Cloud]   Language: ${errorRecord.language}`);
+      console.log(`[FixHive:Cloud]   Framework: ${errorRecord.framework}`);
+      console.log(`[FixHive:Cloud]   Contributor: ${contributorId}`);
+
       const { data, error } = await supabase
         .from('knowledge_entries')
         .insert({
@@ -255,6 +270,13 @@ export async function createCloudClient(config: CloudClientConfig): Promise<Clou
         .single();
 
       if (error) {
+        console.error(`[FixHive:Cloud] Upload failed:`, error);
+        console.error(`[FixHive:Cloud] Error details:`, {
+          message: error.message,
+          code: error.code,
+          hint: error.hint,
+          details: error.details,
+        });
         return {
           success: false,
           isDuplicate: false,
@@ -262,6 +284,7 @@ export async function createCloudClient(config: CloudClientConfig): Promise<Clou
         };
       }
 
+      console.log(`[FixHive:Cloud] Upload successful! Knowledge ID: ${data.id}`);
       return {
         success: true,
         knowledgeId: data.id,

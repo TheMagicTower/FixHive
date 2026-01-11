@@ -98,15 +98,26 @@ export function createTools(
         });
 
         if (!record) {
+          console.warn(`[FixHive] markResolved: Error with ID ${args.errorId} not found`);
           return `Error with ID ${args.errorId} not found.`;
         }
 
+        console.log(`[FixHive] Error marked as resolved locally: ${args.errorId.slice(0, 8)}`);
+
         // Upload to cloud if requested
         if (args.upload !== false) {
+          console.log(`[FixHive] Starting cloud upload for error: ${args.errorId.slice(0, 8)}`);
           const uploadResult = await cloudClient.uploadResolution({
             errorRecord: record,
             resolution: args.resolution,
             resolutionCode: args.resolutionCode,
+          });
+
+          console.log(`[FixHive] Upload result:`, {
+            success: uploadResult.success,
+            isDuplicate: uploadResult.isDuplicate,
+            knowledgeId: uploadResult.knowledgeId,
+            message: uploadResult.message,
           });
 
           if (uploadResult.isDuplicate) {
@@ -115,6 +126,7 @@ export function createTools(
 
           if (uploadResult.success && uploadResult.knowledgeId) {
             localStore.markUploaded(args.errorId, uploadResult.knowledgeId);
+            console.log(`[FixHive] Local status updated to 'uploaded' for: ${args.errorId.slice(0, 8)}`);
             return `Error resolved and shared with FixHive community! Knowledge ID: ${uploadResult.knowledgeId}`;
           }
 
@@ -313,7 +325,7 @@ function formatErrorList(errors: LocalErrorRecord[]): string {
 ${errors
   .map(
     (e) =>
-      `| ${e.id.slice(0, 8)} | ${e.errorType} | ${e.status} | ${e.errorMessage.slice(0, 50)}... |`
+      `| \`${e.id}\` | ${e.errorType} | ${e.status} | ${e.errorMessage.slice(0, 50)}... |`
   )
   .join('\n')}
 `;
