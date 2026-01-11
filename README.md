@@ -26,7 +26,7 @@
 
 > Community-based Error Knowledge Sharing for OpenCode
 
-**Latest: v0.1.31** - Bun runtime compatibility fixed. Plugin now works correctly with OpenCode.
+**Latest: v0.1.34** - Fixed re-uploading already resolved errors to cloud.
 
 FixHive is an OpenCode plugin that automatically captures errors during development sessions, queries a community knowledge base for solutions, and shares resolved errors with other developers.
 
@@ -402,6 +402,66 @@ const solutions = await cloud.searchSimilar({
 ```
 
 ## Troubleshooting
+
+### Upgrade Plugin Version
+
+If you're experiencing issues with an older version of FixHive, follow these steps to upgrade:
+
+#### 1. Check Current Version
+
+Run OpenCode and check the startup logs:
+```bash
+opencode
+```
+
+Look for:
+```
+[FixHive] Plugin loaded
+```
+
+#### 2. Clear OpenCode Cache
+
+Remove the cached plugin files and reinstall:
+
+```bash
+# Method 1: Clear FixHive cache only
+rm -rf ~/.cache/opencode/node_modules/@the-magic-tower*
+
+# Method 2: Clear entire OpenCode cache (if above doesn't work)
+rm -rf ~/.cache/opencode/node_modules/
+```
+
+#### 3. Reinstall Plugin
+
+Navigate to your project directory and reinstall:
+
+```bash
+cd /your/project/path
+npm install @the-magic-tower/fixhive-opencode-plugin@latest
+```
+
+#### 4. Restart OpenCode
+
+```bash
+opencode
+```
+
+You should see updated logs with the latest version:
+```
+[FixHive] Plugin loaded
+[FixHive] Project: /your/project/path
+[FixHive] Cloud: enabled
+[FixHive] Ready - use fixhive_stats to verify
+```
+
+#### 5. Verify Installation
+
+Run the stats command to verify:
+```typescript
+fixhive_stats
+```
+
+This will show you the current local statistics. If you're using the cloud features, check that the connection is working properly.
 
 ### Verify Plugin is Working
 
