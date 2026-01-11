@@ -104,6 +104,14 @@ export const FixHivePlugin: Plugin = async (ctx) => {
         metadata: output.metadata as Record<string, unknown>,
       });
 
+      if (detection.detected) {
+        console.log(`[FixHive] Error detected (confidence: ${Math.round(detection.confidence * 100)}%)`);
+        console.log(`[FixHive]   Type: ${detection.errorType}, Tool: ${input.tool}`);
+        console.log(`[FixHive]   Message: ${detection.errorMessage.substring(0, 100)}...`);
+      } else if (detection.detected) {
+        console.log(`[FixHive] Error detected but confidence too low (${Math.round(detection.confidence * 100)}% < 50%) - not stored`);
+      }
+
       if (detection.detected && detection.confidence >= 0.5) {
         // Sanitize error data before storing locally
         const sanitizedErrorMessage = privacyFilter.sanitize(detection.errorMessage, filterContext).sanitized;
@@ -112,7 +120,11 @@ export const FixHivePlugin: Plugin = async (ctx) => {
           : undefined;
 
         // Store error locally (with sanitized data)
-        localStore.createErrorRecord({
+        const sessionId = pluginContext.sessionId || input.sessionID;
+        if (!sessionId) {
+          console.warn('[FixHive] No session ID available - error not stored. Please send a chat message first.');
+        }
+        const record = localStore.createErrorRecord({
           errorType: detection.errorType,
           errorMessage: sanitizedErrorMessage,
           errorStack: sanitizedErrorStack,
@@ -120,8 +132,12 @@ export const FixHivePlugin: Plugin = async (ctx) => {
           framework: pluginContext.framework,
           toolName: input.tool,
           toolInput: {}, // Tool input is intentionally omitted to avoid storing sensitive data
-          sessionId: pluginContext.sessionId || input.sessionID,
+          sessionId,
         });
+
+        if (record) {
+          console.log(`[FixHive] Error stored locally (ID: ${record.id.slice(0, 8)})`);
+        }
 
         // Query cloud for solutions if client available
         if (cloudClient) {
