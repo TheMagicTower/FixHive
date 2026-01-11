@@ -285,10 +285,10 @@ CREATE POLICY "Anyone can insert knowledge"
 ON knowledge_entries FOR INSERT
 WITH CHECK (true);
 
--- Contributors can update their own entries
+-- Contributors can update their own entries (optimized with subquery)
 CREATE POLICY "Contributors can update own entries"
 ON knowledge_entries FOR UPDATE
-USING (contributor_id = current_setting('app.contributor_id', true));
+USING (contributor_id = (SELECT current_setting('app.contributor_id', true)));
 
 -- Anyone can read usage logs
 CREATE POLICY "Usage logs are viewable by everyone"
