@@ -8,6 +8,33 @@
 
 ---
 
+## [0.1.31] - 2026-01-11
+
+### Security (보안)
+- **Supabase 보안 강화**
+  - 모든 함수에 `SECURITY DEFINER SET search_path = ''` 추가
+  - 테이블 참조를 `public.` 스키마로 명시적 변경
+  - `duplicate_candidates` 테이블 RLS 활성화 + service_role 정책
+  - `vector`, `uuid-ossp` 확장을 `extensions` 스키마로 이동
+  - `usage_logs`, `vote_records` INSERT 정책에 입력 검증 추가
+  - `Contributors can update own entries` 정책 성능 최적화 (서브쿼리)
+
+### Fixed (수정)
+- Function Search Path Mutable 경고 해결
+- Extension in Public 경고 해결
+- RLS Disabled in Public 경고 해결
+- RLS Policy Always True 경고 해결
+- Auth RLS Initialization Plan 경고 해결
+
+---
+
+## [0.1.30] - 2026-01-11
+
+### Fixed (수정)
+- `createLocalStore` 비동기 테스트 수정
+
+---
+
 ## [0.1.29] - 2026-01-10
 
 ### Fixed (수정)
