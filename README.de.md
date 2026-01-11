@@ -13,7 +13,7 @@
 
 > Community-basiertes Fehlerwissen-Sharing für OpenCode
 
-**Neueste Version: v0.1.31** - Bun-Runtime-Kompatibilitätsprobleme behoben. Das Plugin funktioniert jetzt korrekt mit OpenCode.
+**Neueste Version: v0.1.34** - Bun-Runtime-Kompatibilitätsprobleme behoben. Das Plugin funktioniert jetzt korrekt mit OpenCode.
 
 FixHive ist ein OpenCode-Plugin, das während der Entwicklungssitzungen automatisch Fehler erfasst, eine Community-Wissensdatenbank nach Lösungen abfragt und gelöste Fehler mit anderen Entwicklern teilt.
 
