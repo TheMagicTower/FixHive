@@ -74,16 +74,6 @@ Then run OpenCode - the plugin will be automatically installed and loaded.
 
 **That's it!** FixHive connects to the community knowledge base by default. No environment variables required.
 
-You'll see these logs when the plugin loads successfully:
-```
-[FixHive] Starting plugin initialization (CodeCaseDB v2.0)
-[FixHive] Plugin loaded
-[FixHive] Project: /your/project/path
-[FixHive] Cloud: enabled
-[FixHive] Device: abc12345...
-[FixHive] Ready - use fixhive_search_cases to find solutions
-```
-
 ## How It Works
 
 ```

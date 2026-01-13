@@ -50,15 +50,8 @@ const COMMUNITY_SUPABASE = {
  * FixHive Plugin Factory
  */
 export const FixHivePlugin: Plugin = async (ctx) => {
-  console.log('[FixHive] Starting plugin initialization (CodeCaseDB v2.0)');
-
   // Load configuration from environment
   const config = loadConfig();
-
-  console.log('[FixHive] Plugin loaded');
-  console.log(`[FixHive] Project: ${ctx.directory}`);
-  console.log(`[FixHive] Cloud: ${config.supabaseUrl ? 'enabled' : 'disabled'}`);
-  console.log(`[FixHive] Device: ${config.deviceId.slice(0, 8)}...`);
 
   // Initialize cloud client if configured
   let cloudClient: CloudClient | null = null;
@@ -69,10 +62,8 @@ export const FixHivePlugin: Plugin = async (ctx) => {
         supabaseKey: config.supabaseAnonKey,
         deviceId: config.deviceId,
       });
-      console.log('[FixHive] Cloud client initialized');
-    } catch (err) {
-      console.error('[FixHive] Failed to initialize cloud client:', err);
-      console.error('[FixHive] Falling back to offline mode');
+    } catch {
+      // Silently fall back to offline mode
     }
   }
 
@@ -84,14 +75,6 @@ export const FixHivePlugin: Plugin = async (ctx) => {
     framework: detectFramework(ctx.directory),
     packages: detectPackages(ctx.directory),
   };
-
-  // Log detected environment
-  if (pluginContext.language) {
-    console.log(
-      `[FixHive] Detected: ${pluginContext.language}${pluginContext.framework ? ` / ${pluginContext.framework}` : ''}`
-    );
-  }
-  console.log('[FixHive] Ready - use fixhive_search_cases to find solutions');
 
   // Error-producing tools to monitor
   const errorProducingTools = ['bash', 'edit', 'write', 'read', 'terminal'];
@@ -106,13 +89,8 @@ export const FixHivePlugin: Plugin = async (ctx) => {
       const hasError = detectErrorInOutput(output.output);
 
       if (hasError) {
-        console.log(`[FixHive] Potential error detected in ${input.tool} output`);
-        console.log(
-          '[FixHive] Use fixhive_search_cases with a normalized error signature to find solutions'
-        );
-
-        // Append hint to output
-        output.title = `${output.title} [FixHive: Error detected - use fixhive_search_cases]`;
+        // Append hint to output title for AI to notice
+        output.title = `${output.title} [FixHive: Error detected]`;
       }
     },
 
