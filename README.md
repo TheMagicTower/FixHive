@@ -61,15 +61,12 @@ rm -rf .fixhive/
 
 ## Installation
 
-Add FixHive to your OpenCode configuration file (`opencode.json`):
+Add FixHive to your OpenCode configuration file (`~/.config/opencode/opencode.json` or project `opencode.json`):
 
 ```json
 {
-  "plugins": {
-    "fixhive": {
-      "name": "@the-magic-tower/fixhive-opencode-plugin@beta"
-    }
-  }
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["@the-magic-tower/fixhive-opencode-plugin@beta"]
 }
 ```
 
