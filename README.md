@@ -352,7 +352,7 @@ MIT - see [LICENSE](LICENSE) for details.
 ## Related Packages
 
 - [@the-magic-tower/fixhive-shared](https://github.com/TheMagicTower/fixhive-shared) - Shared utilities
-- [@the-magic-tower/fixhive-claude-code](https://github.com/TheMagicTower/FixHive-ClaudeCode) - Claude Code MCP server
+- [@the-magic-tower/fixhive-claude-code](https://github.com/TheMagicTower/FixHiveMono) - Claude Code plugin
 
 ## Acknowledgments
 
