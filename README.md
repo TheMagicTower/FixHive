@@ -61,33 +61,19 @@ rm -rf .fixhive/
 
 ## Installation
 
-```bash
-npm install @the-magic-tower/fixhive-opencode-plugin
-```
-
-## Quick Start
-
-### 1. Install the package
-
-```bash
-npm install @the-magic-tower/fixhive-opencode-plugin
-```
-
-### 2. Add to your OpenCode configuration (`opencode.json`)
+Add FixHive to your OpenCode configuration file (`opencode.json`):
 
 ```json
 {
-  "plugins": [
-    "@the-magic-tower/fixhive-opencode-plugin"
-  ]
+  "plugins": {
+    "fixhive": {
+      "name": "@the-magic-tower/fixhive-opencode-plugin@beta"
+    }
+  }
 }
 ```
 
-### 3. Run OpenCode
-
-```bash
-opencode
-```
+Then run OpenCode - the plugin will be automatically installed and loaded.
 
 **That's it!** FixHive connects to the community knowledge base by default. No environment variables required.
 
