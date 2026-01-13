@@ -53,13 +53,14 @@ npm install @the-magic-tower/fixhive-opencode-plugin
 npm install @the-magic-tower/fixhive-opencode-plugin
 ```
 
-### 2. OpenCode 설정 파일(`opencode.json`)에 추가
+### 2. OpenCode 설정 파일에 추가
+
+`~/.config/opencode/opencode.json` 또는 프로젝트의 `opencode.json`:
 
 ```json
 {
-  "plugins": [
-    "@the-magic-tower/fixhive-opencode-plugin"
-  ]
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["@the-magic-tower/fixhive-opencode-plugin@beta"]
 }
 ```
 

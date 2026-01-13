@@ -33,14 +33,13 @@ npm install @the-magic-tower/fixhive-opencode-plugin
 
 ## Schnellstart
 
-Fügen Sie zu Ihrer OpenCode-Konfiguration hinzu (`opencode.config.ts`):
+Fügen Sie zu Ihrer OpenCode-Konfiguration hinzu (`~/.config/opencode/opencode.json`):
 
-```typescript
-import FixHivePlugin from '@the-magic-tower/fixhive-opencode-plugin';
-
-export default {
-  plugins: [FixHivePlugin],
-};
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["@the-magic-tower/fixhive-opencode-plugin@beta"]
+}
 ```
 
 **Das war's!** FixHive verbindet sich standardmäßig mit der Community-Wissensdatenbank. Keine Umgebungsvariablen erforderlich.

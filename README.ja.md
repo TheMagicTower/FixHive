@@ -33,14 +33,13 @@ npm install @the-magic-tower/fixhive-opencode-plugin
 
 ## クイックスタート
 
-OpenCode設定ファイル（`opencode.config.ts`）に追加：
+OpenCode設定ファイル（`~/.config/opencode/opencode.json`）に追加：
 
-```typescript
-import FixHivePlugin from '@the-magic-tower/fixhive-opencode-plugin';
-
-export default {
-  plugins: [FixHivePlugin],
-};
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["@the-magic-tower/fixhive-opencode-plugin@beta"]
+}
 ```
 
 **以上！** FixHiveはデフォルトでコミュニティナレッジベースに接続します。環境変数の設定は不要です。
