@@ -4,7 +4,7 @@ This file provides guidance to Claude Code when working with the FixHive codebas
 
 ## Project Overview
 
-FixHive is an OpenCode plugin for community-based error knowledge sharing. It automatically captures errors during development sessions, queries a community knowledge base for solutions, and shares resolved errors with other developers.
+FixHive is an OpenCode plugin for community-based error knowledge sharing (CodeCaseDB v2.0). It automatically captures errors during development sessions, queries a community knowledge base for solutions, and shares resolved errors with other developers.
 
 **Package**: `@the-magic-tower/fixhive-opencode-plugin`
 **npm**: https://www.npmjs.com/package/@the-magic-tower/fixhive-opencode-plugin
@@ -16,11 +16,8 @@ FixHive is an OpenCode plugin for community-based error knowledge sharing. It au
 # Install dependencies
 npm install
 
-# Build (ESM format)
+# Build (ESM format with Bun)
 npm run build
-
-# Build with type declarations
-npm run build:dts
 
 # Watch mode for development
 npm run dev
@@ -40,42 +37,67 @@ npm run test:coverage
 ```
 src/
 ├── index.ts              # Main exports
-├── plugin/
-│   ├── index.ts          # Plugin definition & hooks
-│   └── tools.ts          # Custom OpenCode tools
-├── core/
-│   ├── error-detector.ts # Error pattern matching
-│   ├── privacy-filter.ts # Sensitive data removal
-│   └── hash.ts           # Fingerprinting utilities
-├── storage/
-│   ├── local-store.ts    # SQLite local storage
-│   └── migrations.ts     # Database schema
-├── cloud/
-│   ├── client.ts         # Supabase client
-│   └── embedding.ts      # OpenAI embeddings
-└── types/
-    └── index.ts          # TypeScript definitions
+└── plugin/
+    ├── index.ts          # Plugin definition & hooks
+    └── tools.ts          # Custom OpenCode tools (3 tools)
+
+# Shared package (../packages/shared)
+packages/shared/
+├── src/
+│   ├── types/            # CaseGroup, CaseVariant, Resolution, Vote
+│   ├── device/           # device_id management (~/.codecasedb/device_id)
+│   ├── cloud/            # Supabase client, ranking algorithm
+│   └── utils/            # hash, privacy filtering
 ```
 
 ### Data Flow
 
 1. **Error Detection** (`tool.execute.after` hook)
    - Monitors bash, edit, write, read, terminal tools
-   - Multi-signal detection: exit codes, stderr, error patterns, stack traces
+   - Pattern-based detection with hints for AI
 
-2. **Privacy Filtering**
+2. **Privacy Filtering** (from shared package)
    - Sanitizes API keys, tokens, emails, file paths, credentials
-   - Applied before local storage AND cloud transmission
+   - Applied before cloud transmission
 
-3. **Local Storage** (SQLite)
-   - `error_records`: Captured errors with status tracking
-   - `query_cache`: Cached cloud query results
-   - `usage_stats`: Usage statistics
+3. **Cloud Knowledge** (Supabase + pgvector)
+   - `case_groups`: Grouped errors by signature hash
+   - `case_variants`: Environment-specific solutions
+   - `resolutions`: Individual resolution reports
+   - `votes`: Community voting
 
-4. **Cloud Knowledge** (Supabase + pgvector)
-   - `knowledge_entries`: Community solutions with embeddings
-   - `usage_logs`: Analytics and voting data
-   - Semantic similarity search via pgvector
+### Device Identification
+
+FixHive uses a persistent device ID stored in `~/.codecasedb/device_id`. This ID:
+- Is automatically generated on first use
+- Persists across sessions
+- Does not contain any personal information
+- Used for vote deduplication and contribution tracking
+
+## Error Signature Normalization
+
+When using `fixhive_search_cases` or `fixhive_report_resolution`, normalize error messages to create reusable signatures:
+
+### Normalization Rules
+
+Replace variable parts with placeholders:
+- `{class}` - Class/type names (e.g., `MyComponent`, `UserService`)
+- `{file}` - File names (e.g., `index.ts`, `app.py`)
+- `{id}` - Numeric IDs (e.g., `12345`)
+- `{uuid}` - UUIDs (e.g., `550e8400-e29b-41d4-a716-446655440000`)
+- `{timestamp}` - Timestamps (e.g., `2024-01-15T10:30:00Z`)
+- `{path}` - File paths (e.g., `/Users/dev/project/src`)
+- `{table}.{column}` - Database identifiers
+- `{route}` - URL paths (e.g., `/api/users/123`)
+- `{view}` - View/template names
+
+### Examples
+
+| Original Error | Normalized Signature |
+|---------------|---------------------|
+| `TypeError: Cannot read property 'name' of undefined at UserComponent.tsx:42` | `TypeError: Cannot read property 'name' of undefined at {file}:{id}` |
+| `SQLSTATE[23000]: Duplicate entry '42' for key 'users.email'` | `SQLSTATE[23000]: Duplicate entry '{id}' for key '{table}.{column}'` |
+| `Error: ENOENT: no such file or directory '/home/user/project/config.json'` | `Error: ENOENT: no such file or directory '{path}'` |
 
 ## Key Patterns
 
@@ -86,52 +108,40 @@ src/
 export const FixHivePlugin: Plugin = async (ctx) => {
   return {
     'tool.execute.after': async (input, output) => { /* error detection */ },
-    'experimental.session.compacting': async (input, output) => { /* context preservation */ },
     'chat.message': async (input, output) => { /* session tracking */ },
-    tool: { /* custom tools */ },
+    tool: { /* 3 custom tools */ },
   };
 };
 ```
 
 ### Security Considerations
 
-1. **SQL Injection Prevention**: `LocalStore.incrementStat` uses whitelist validation
-2. **ReDoS Prevention**: Privacy filter regex patterns have length limits
-3. **Regex State Pollution**: `containsSensitiveData` resets lastIndex before/after testing
-4. **Graceful Degradation**: Cloud errors don't crash the plugin
+1. **Privacy Filtering**: Sensitive data redacted before cloud transmission
+2. **ReDoS Prevention**: Regex patterns have length limits
+3. **Graceful Degradation**: Cloud errors don't crash the plugin
 
 ### Custom Tools
 
 | Tool | Description |
 |------|-------------|
-| `fixhive_search` | Search knowledge base for solutions |
-| `fixhive_resolve` | Mark error resolved & share solution |
-| `fixhive_list` | List session errors |
-| `fixhive_vote` | Vote on solution quality |
-| `fixhive_stats` | View usage statistics |
-| `fixhive_helpful` | Report helpful solution |
+| `fixhive_search_cases` | Search knowledge base for error solutions |
+| `fixhive_report_resolution` | Report an error resolution to community |
+| `fixhive_vote` | Vote on solution quality (up/down/report) |
 
 ## Environment Variables
 
 ```bash
-# Required for cloud features
+# Optional: Custom Supabase instance (defaults to community server)
 FIXHIVE_SUPABASE_URL=https://your-project.supabase.co
 FIXHIVE_SUPABASE_KEY=your-anon-key
-
-# Optional: For semantic search embeddings
-OPENAI_API_KEY=sk-...
-
-# Optional: Custom contributor ID
-FIXHIVE_CONTRIBUTOR_ID=your-id
 ```
 
 ## Tech Stack
 
 - **Language**: TypeScript (ES2022, ESM modules)
-- **Bundler**: tsup
-- **Local DB**: better-sqlite3
+- **Bundler**: Bun
 - **Cloud**: Supabase (PostgreSQL + pgvector)
-- **Embeddings**: OpenAI text-embedding-3-small (1536 dims)
+- **Shared Package**: @the-magic-tower/fixhive-shared
 - **Plugin API**: @opencode-ai/plugin ^1.1.1
 
 ## Testing
@@ -166,7 +176,17 @@ gh release create vX.Y.Z --generate-notes
 1. Create new Supabase project
 2. Run setup script in SQL editor:
    ```bash
-   cat scripts/setup-supabase.sql
+   cat scripts/setup-codecasedb-v2.sql
    ```
 3. Get project URL and anon key from Settings > API
 4. Enable pgvector extension for semantic search
+
+## Ranking Algorithm
+
+Solutions are ranked using:
+
+```
+final_score = env_match × 0.4 + success_rate × 0.3 + vote_score × 0.2 + report_factor × 0.1
+
+env_match = language_match × 0.4 + framework_match × 0.4 + packages_overlap × 0.1 × 2
+```

@@ -1,7 +1,9 @@
 /**
  * FixHive - Community-based Error Knowledge Sharing for OpenCode
  *
- * @module @fixhive/opencode-plugin
+ * CodeCaseDB v2.0
+ *
+ * @module @the-magic-tower/fixhive-opencode-plugin
  * @description
  * FixHive is an OpenCode plugin that automatically captures errors during
  * development sessions, queries a community knowledge base for solutions,
@@ -10,7 +12,7 @@
  * @example
  * ```typescript
  * // In your OpenCode plugin configuration
- * import FixHivePlugin from '@fixhive/opencode-plugin';
+ * import FixHivePlugin from '@the-magic-tower/fixhive-opencode-plugin';
  *
  * export default FixHivePlugin;
  * ```
@@ -20,7 +22,6 @@
  * # Environment variables
  * FIXHIVE_SUPABASE_URL=https://your-project.supabase.co
  * FIXHIVE_SUPABASE_KEY=your-anon-key
- * OPENAI_API_KEY=sk-...  # Optional, for embeddings
  * ```
  */
 
@@ -31,63 +32,21 @@
 import FixHivePlugin from './plugin/index.js';
 export default FixHivePlugin;
 
-// Types only (these are erased at runtime, so safe to export)
+// Types from shared package (these are erased at runtime, so safe to export)
 export type {
-  // Core types
-  ErrorType,
-  ErrorStatus,
-  Language,
-  Severity,
-
-  // Local storage types
-  LocalErrorRecord,
-  QueryCacheEntry,
-  LocalStats,
-
-  // Cloud types
-  CloudKnowledgeEntry,
-  DuplicateCheckResult,
-  ContributorStats,
-
-  // Detection types
-  DetectedSignal,
-  ErrorDetectionResult,
-  StackFrame,
-  StackTraceInfo,
-
-  // Plugin context types
-  FixHiveContext,
-  ToolOutput,
-
-  // Privacy filter types
-  PrivacyFilterRule,
-  SanitizedContent,
-  FilterContext,
-
-  // API types
-  SearchRequest,
-  SearchResponse,
-  UploadRequest,
-  UploadResponse,
-
-  // Tool argument types
-  QueryKnowledgeArgs,
-  SubmitResolutionArgs,
-  ListErrorsArgs,
-  MarkResolvedArgs,
-  VoteArgs,
-
-  // Configuration types
-  FixHiveConfig,
-  PartialConfig,
-
-  // Event types
-  FixHiveEvent,
-} from './types/index.js';
-
-// Re-export interface types
-export type { ErrorDetector as ErrorDetectorInterface } from './core/error-detector.js';
-export type { PrivacyFilter as PrivacyFilterInterface } from './core/privacy-filter.js';
-export type { LocalStore as LocalStoreInterface } from './storage/local-store.js';
-export type { CloudClient as CloudClientInterface } from './cloud/client.js';
-export type { EmbeddingService as EmbeddingServiceInterface, EmbeddingServiceConfig } from './cloud/embedding.js';
+  CaseGroup,
+  CaseVariant,
+  Resolution,
+  Vote,
+  Device,
+  Environment,
+  SearchCasesInput,
+  SearchCasesOutput,
+  ReportResolutionInput,
+  ReportResolutionOutput,
+  VoteInput,
+  VoteOutput,
+  RankedVariant,
+  FilterResult,
+  CloudClient,
+} from '@the-magic-tower/fixhive-shared';

@@ -1,74 +1,78 @@
 /**
- * FixHive OpenCode Plugin
+ * FixHive OpenCode Plugin - CodeCaseDB v2.0
+ *
  * Community-based error knowledge sharing plugin for OpenCode
  */
 
 import type { Plugin } from '@opencode-ai/plugin';
-import { tool } from '@opencode-ai/plugin';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { createErrorDetector } from '../core/error-detector.js';
-import { createPrivacyFilter, createFilterContext, type PrivacyFilter } from '../core/privacy-filter.js';
-import { createLocalStore, type LocalStore } from '../storage/local-store.js';
-import { createCloudClient, type CloudClient } from '../cloud/client.js';
-import { generateErrorFingerprint } from '../core/hash.js';
-import { createTools } from './tools.js';
-import type { FixHiveContext, Language, FixHiveConfig } from '../types/index.js';
+import {
+  createCloudClient,
+  getDeviceId,
+} from '@the-magic-tower/fixhive-shared';
+import type { CloudClient } from '@the-magic-tower/fixhive-shared';
+import { createTools, createOfflineTools } from './tools.js';
+
+type Language =
+  | 'typescript'
+  | 'python'
+  | 'rust'
+  | 'go'
+  | 'java'
+  | 'ruby'
+  | 'php'
+  | 'unknown';
+
+interface FixHiveConfig {
+  supabaseUrl?: string;
+  supabaseAnonKey?: string;
+  deviceId: string;
+}
+
+interface FixHiveContext {
+  sessionId: string;
+  projectDirectory: string;
+  language?: string;
+  framework?: string;
+  packages?: Record<string, string>;
+}
 
 /**
- * Default configuration
+ * Default FixHive Community Supabase
  */
-const DEFAULT_CONFIG: Partial<FixHiveConfig> = {
-  cacheExpirationMs: 3600000, // 1 hour
-  embeddingModel: 'text-embedding-3-small',
-  embeddingDimensions: 1536,
-  similarityThreshold: 0.7,
-  maxSearchResults: 10,
+const COMMUNITY_SUPABASE = {
+  url: 'https://flpqzkrpufrgnpxvftip.supabase.co',
+  anonKey: 'sb_publishable_w3Y2uo-0vb4bFVamntChVw_Aqi0rv2y',
 };
 
 /**
  * FixHive Plugin Factory
  */
 export const FixHivePlugin: Plugin = async (ctx) => {
-  console.log('[FixHive:DEBUG] Step 1: Starting plugin initialization');
+  console.log('[FixHive] Starting plugin initialization (CodeCaseDB v2.0)');
 
   // Load configuration from environment
   const config = loadConfig();
-  console.log('[FixHive:DEBUG] Step 2: Config loaded');
 
-  // Log plugin initialization
   console.log('[FixHive] Plugin loaded');
   console.log(`[FixHive] Project: ${ctx.directory}`);
   console.log(`[FixHive] Cloud: ${config.supabaseUrl ? 'enabled' : 'disabled'}`);
-
-  console.log('[FixHive:DEBUG] Step 3: Creating privacy filter');
-  // Initialize components using factory functions
-  const privacyFilter = createPrivacyFilter();
-  console.log('[FixHive:DEBUG] Step 4: Creating filter context');
-  const filterContext = createFilterContext(ctx.directory);
-  console.log('[FixHive:DEBUG] Step 5: Creating error detector');
-  const errorDetector = createErrorDetector(privacyFilter);
-  console.log('[FixHive:DEBUG] Step 6: Creating local store');
-  const localStore = await createLocalStore(ctx.directory);
-  console.log('[FixHive:DEBUG] Step 7: Local store created');
+  console.log(`[FixHive] Device: ${config.deviceId.slice(0, 8)}...`);
 
   // Initialize cloud client if configured
   let cloudClient: CloudClient | null = null;
   if (config.supabaseUrl && config.supabaseAnonKey) {
     try {
-      console.log('[FixHive:DEBUG] Step 8: Creating cloud client');
-      cloudClient = await createCloudClient({
+      cloudClient = createCloudClient({
         supabaseUrl: config.supabaseUrl,
-        supabaseAnonKey: config.supabaseAnonKey,
-        openaiApiKey: config.openaiApiKey,
-        contributorId: config.contributorId,
-        similarityThreshold: config.similarityThreshold,
+        supabaseKey: config.supabaseAnonKey,
+        deviceId: config.deviceId,
       });
-      console.log('[FixHive:DEBUG] Step 9: Cloud client created');
+      console.log('[FixHive] Cloud client initialized');
     } catch (err) {
       console.error('[FixHive] Failed to initialize cloud client:', err);
       console.error('[FixHive] Falling back to offline mode');
-      // Continue with null cloudClient (offline mode)
     }
   }
 
@@ -78,13 +82,16 @@ export const FixHivePlugin: Plugin = async (ctx) => {
     projectDirectory: ctx.directory,
     language: detectLanguage(ctx.directory),
     framework: detectFramework(ctx.directory),
+    packages: detectPackages(ctx.directory),
   };
 
   // Log detected environment
   if (pluginContext.language) {
-    console.log(`[FixHive] Detected: ${pluginContext.language}${pluginContext.framework ? ` / ${pluginContext.framework}` : ''}`);
+    console.log(
+      `[FixHive] Detected: ${pluginContext.language}${pluginContext.framework ? ` / ${pluginContext.framework}` : ''}`
+    );
   }
-  console.log('[FixHive] Ready - use fixhive_stats to verify');
+  console.log('[FixHive] Ready - use fixhive_search_cases to find solutions');
 
   // Error-producing tools to monitor
   const errorProducingTools = ['bash', 'edit', 'write', 'read', 'terminal'];
@@ -95,172 +102,30 @@ export const FixHivePlugin: Plugin = async (ctx) => {
       // Only process tools that can produce errors
       if (!errorProducingTools.includes(input.tool)) return;
 
-      // Detect errors in output
-      const detection = errorDetector.detect({
-        tool: input.tool,
-        output: output.output,
-        exitCode: (output.metadata as Record<string, number>)?.exitCode,
-        stderr: (output.metadata as Record<string, string>)?.stderr,
-        metadata: output.metadata as Record<string, unknown>,
-      });
+      // Simple error detection (confidence-based)
+      const hasError = detectErrorInOutput(output.output);
 
-      if (detection.detected) {
-        console.log(`[FixHive] Error detected (confidence: ${Math.round(detection.confidence * 100)}%)`);
-        console.log(`[FixHive]   Type: ${detection.errorType}, Tool: ${input.tool}`);
-        console.log(`[FixHive]   Message: ${detection.errorMessage.substring(0, 100)}...`);
-      } else if (detection.detected) {
-        console.log(`[FixHive] Error detected but confidence too low (${Math.round(detection.confidence * 100)}% < 50%) - not stored`);
-      }
+      if (hasError) {
+        console.log(`[FixHive] Potential error detected in ${input.tool} output`);
+        console.log(
+          '[FixHive] Use fixhive_search_cases with a normalized error signature to find solutions'
+        );
 
-      if (detection.detected && detection.confidence >= 0.5) {
-        // Sanitize error data before storing locally
-        const sanitizedErrorMessage = privacyFilter.sanitize(detection.errorMessage, filterContext).sanitized;
-        const sanitizedErrorStack = detection.errorStack
-          ? privacyFilter.sanitize(detection.errorStack, filterContext).sanitized
-          : undefined;
-
-        // Store error locally (with sanitized data)
-        const sessionId = pluginContext.sessionId || input.sessionID;
-        if (!sessionId) {
-          console.warn('[FixHive] No session ID available - error not stored. Please send a chat message first.');
-        }
-        const record = localStore.createErrorRecord({
-          errorType: detection.errorType,
-          errorMessage: sanitizedErrorMessage,
-          errorStack: sanitizedErrorStack,
-          language: pluginContext.language,
-          framework: pluginContext.framework,
-          toolName: input.tool,
-          toolInput: {}, // Tool input is intentionally omitted to avoid storing sensitive data
-          sessionId,
-        });
-
-        if (record) {
-          console.log(`[FixHive] Error stored locally (ID: ${record.id.slice(0, 8)})`);
-        }
-
-        // Query cloud for solutions if client available
-        if (cloudClient) {
-          try {
-            // Use already-sanitized error data for cloud query
-            const solutions = await cloudClient.searchSimilar({
-              errorMessage: sanitizedErrorMessage,
-              errorStack: sanitizedErrorStack,
-              language: pluginContext.language,
-              framework: pluginContext.framework,
-              limit: 3,
-            });
-
-            if (solutions.results.length > 0) {
-              // Cache results using sanitized fingerprint
-              localStore.cacheResults(
-                generateErrorFingerprint(sanitizedErrorMessage, sanitizedErrorStack),
-                solutions.results
-              );
-
-              // Append solution hints to output title
-              output.title = `${output.title} [FixHive: ${solutions.results.length} solution(s) found]`;
-            }
-          } catch (e) {
-            // Log error with context but avoid exposing sensitive details
-            const errorMessage = e instanceof Error ? e.message : 'Unknown error';
-            console.error(`[FixHive] Cloud query failed: ${errorMessage}`);
-            // Don't throw - gracefully degrade to offline mode
-          }
-        }
-      }
-    },
-
-    // ============ Session Compaction Hook ============
-    'experimental.session.compacting': async (_input, output) => {
-      const unresolvedErrors = localStore.getUnresolvedErrors(pluginContext.sessionId);
-
-      if (unresolvedErrors.length > 0) {
-        output.context.push(`
-## FixHive: Unresolved Errors in Session
-
-${unresolvedErrors.map((e) => `- [${e.id.slice(0, 8)}] ${e.errorType}: ${e.errorMessage.slice(0, 100)}...`).join('\n')}
-
-Use \`fixhive_mark_resolved\` when errors are fixed to contribute solutions.
-`);
+        // Append hint to output
+        output.title = `${output.title} [FixHive: Error detected - use fixhive_search_cases]`;
       }
     },
 
     // ============ Chat Message Hook ============
     'chat.message': async (input, _output) => {
-      // Update session ID
       pluginContext.sessionId = input.sessionID;
     },
 
     // ============ Custom Tools ============
     tool: cloudClient
-      ? createTools(localStore, cloudClient, privacyFilter, pluginContext)
-      : createOfflineTools(localStore, privacyFilter, pluginContext),
+      ? createTools(cloudClient, pluginContext)
+      : createOfflineTools(pluginContext),
   };
-};
-
-/**
- * Create offline-only tools when cloud is not configured
- */
-function createOfflineTools(
-  localStore: LocalStore,
-  _privacyFilter: PrivacyFilter,
-  context: FixHiveContext
-) {
-  return {
-    fixhive_list: tool({
-      description: 'List errors detected in the current session.',
-      args: {
-        status: tool.schema
-          .enum(['unresolved', 'resolved', 'uploaded'])
-          .optional()
-          .describe('Filter by status'),
-        limit: tool.schema.number().optional().describe('Maximum results (default: 10)'),
-      },
-      async execute(args: { status?: string; limit?: number }, ctx: { sessionID: string }) {
-        context.sessionId = ctx.sessionID;
-
-        const errors = localStore.getSessionErrors(ctx.sessionID, {
-          status: args.status as 'unresolved' | 'resolved' | 'uploaded',
-          limit: args.limit || 10,
-        });
-
-        if (errors.length === 0) {
-          return 'No errors recorded in this session.';
-        }
-
-        return `## Session Errors (${errors.length})\n\n${errors.map((e) => `- [${e.id.slice(0, 8)}] ${e.errorType}: ${e.errorMessage.slice(0, 80)}...`).join('\n')}\n\n*Cloud features disabled. Set FIXHIVE_SUPABASE_URL and FIXHIVE_SUPABASE_KEY to enable.*`;
-      },
-    }),
-
-    fixhive_stats: tool({
-      description: 'Get FixHive usage statistics.',
-      args: {},
-      async execute() {
-        const stats = localStore.getStats();
-
-        return `
-## FixHive Statistics (Offline Mode)
-
-### Local
-- Errors recorded: ${stats.totalErrors}
-- Resolved: ${stats.resolvedErrors}
-- Uploaded: ${stats.uploadedErrors}
-
-*Cloud features disabled. Set FIXHIVE_SUPABASE_URL and FIXHIVE_SUPABASE_KEY to enable community sharing.*
-`;
-      },
-    }),
-  };
-}
-
-/**
- * Default FixHive Community Supabase (공유 지식 베이스)
- * 환경변수로 오버라이드 가능
- */
-const COMMUNITY_SUPABASE = {
-  url: 'https://flpqzkrpufrgnpxvftip.supabase.co',
-  anonKey: 'sb_publishable_w3Y2uo-0vb4bFVamntChVw_Aqi0rv2y',
 };
 
 /**
@@ -270,14 +135,31 @@ function loadConfig(): FixHiveConfig {
   return {
     supabaseUrl: process.env.FIXHIVE_SUPABASE_URL || COMMUNITY_SUPABASE.url,
     supabaseAnonKey: process.env.FIXHIVE_SUPABASE_KEY || COMMUNITY_SUPABASE.anonKey,
-    openaiApiKey: process.env.OPENAI_API_KEY || process.env.FIXHIVE_OPENAI_KEY || '',
-    contributorId: process.env.FIXHIVE_CONTRIBUTOR_ID || '',
-    cacheExpirationMs: DEFAULT_CONFIG.cacheExpirationMs!,
-    embeddingModel: DEFAULT_CONFIG.embeddingModel!,
-    embeddingDimensions: DEFAULT_CONFIG.embeddingDimensions!,
-    similarityThreshold: DEFAULT_CONFIG.similarityThreshold!,
-    maxSearchResults: DEFAULT_CONFIG.maxSearchResults!,
+    deviceId: getDeviceId(),
   };
+}
+
+/**
+ * Detect errors in tool output
+ */
+function detectErrorInOutput(output: string): boolean {
+  const errorPatterns = [
+    /error:/i,
+    /exception:/i,
+    /traceback/i,
+    /failed:/i,
+    /fatal:/i,
+    /cannot find/i,
+    /undefined is not/i,
+    /is not defined/i,
+    /syntaxerror/i,
+    /typeerror/i,
+    /referenceerror/i,
+    /SQLSTATE/,
+    /errno/i,
+  ];
+
+  return errorPatterns.some((pattern) => pattern.test(output));
 }
 
 /**
@@ -310,7 +192,6 @@ function detectLanguage(directory: string): Language | undefined {
  * Detect framework from project
  */
 function detectFramework(directory: string): string | undefined {
-  // Check package.json for JS/TS projects
   const pkgPath = join(directory, 'package.json');
   if (existsSync(pkgPath)) {
     try {
@@ -324,12 +205,12 @@ function detectFramework(directory: string): string | undefined {
       if (deps['express']) return 'express';
       if (deps['fastify']) return 'fastify';
       if (deps['hono']) return 'hono';
+      if (deps['laravel']) return 'laravel';
     } catch {
       // Ignore parse errors
     }
   }
 
-  // Check for Python frameworks
   const reqPath = join(directory, 'requirements.txt');
   if (existsSync(reqPath)) {
     try {
@@ -339,6 +220,43 @@ function detectFramework(directory: string): string | undefined {
       if (content.includes('fastapi')) return 'fastapi';
     } catch {
       // Ignore read errors
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Detect package versions from project
+ */
+function detectPackages(directory: string): Record<string, string> | undefined {
+  const pkgPath = join(directory, 'package.json');
+  if (existsSync(pkgPath)) {
+    try {
+      const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+      const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+
+      // Return top 5 important packages
+      const important = [
+        'react',
+        'next',
+        'vue',
+        'angular',
+        'express',
+        'typescript',
+        'node',
+      ];
+      const result: Record<string, string> = {};
+
+      for (const pkg of important) {
+        if (deps[pkg]) {
+          result[pkg] = deps[pkg].replace(/^[\^~]/, '');
+        }
+      }
+
+      return Object.keys(result).length > 0 ? result : undefined;
+    } catch {
+      // Ignore parse errors
     }
   }
 

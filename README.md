@@ -21,12 +21,10 @@
   <a href="https://opensource.org/licenses/MIT">
     <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT">
   </a>
-  <img src="https://img.shields.io/badge/Node.js-18%20%7C%2020%20%7C%2022-green" alt="Node.js Version">
+  <img src="https://img.shields.io/badge/Node.js-20%20%7C%2022-green" alt="Node.js Version">
 </p>
 
-> Community-based Error Knowledge Sharing for OpenCode
-
-**Latest: v0.1.34** - Fixed re-uploading already resolved errors to cloud.
+> Community-based Error Knowledge Sharing for OpenCode (CodeCaseDB v2.0)
 
 FixHive is an OpenCode plugin that automatically captures errors during development sessions, queries a community knowledge base for solutions, and shares resolved errors with other developers.
 
@@ -34,10 +32,32 @@ FixHive is an OpenCode plugin that automatically captures errors during developm
 
 - **Auto Error Detection**: Automatically detects errors from tool outputs (bash, edit, etc.)
 - **Cloud Knowledge Base**: Search community solutions using semantic similarity (pgvector)
-- **Local Caching**: SQLite-based local storage for offline access
+- **AI-Guided Normalization**: Normalize error signatures for better matching
+- **Environment Matching**: Solutions ranked by language, framework, and package compatibility
 - **Privacy Filtering**: Automatically redacts sensitive data (API keys, paths, emails)
-- **Real-time Sync**: Immediate cloud communication on error/resolution
-- **Duplicate Prevention**: Smart deduplication using embeddings and hash matching
+- **Community Voting**: Upvote/downvote solutions to help identify the best fixes
+
+## Upgrading from v1.x
+
+If you're upgrading from v1.x, please read the [Migration Guide](MIGRATION.md) for important changes:
+
+- **Tool names changed**: `fixhive_search` → `fixhive_search_cases`, etc.
+- **Local storage removed**: No more `.fixhive/` directory
+- **Automatic device ID**: No need to set `FIXHIVE_CONTRIBUTOR_ID`
+- **Environment matching**: Better solution ranking based on your stack
+
+Quick upgrade:
+
+```bash
+# Update package
+npm install @the-magic-tower/fixhive-opencode-plugin@latest
+
+# Clean old data (optional)
+rm -rf .fixhive/
+
+# Remove old env vars (optional)
+# FIXHIVE_CONTRIBUTOR_ID and OPENAI_API_KEY are no longer needed
+```
 
 ## Installation
 
@@ -73,32 +93,32 @@ opencode
 
 You'll see these logs when the plugin loads successfully:
 ```
+[FixHive] Starting plugin initialization (CodeCaseDB v2.0)
 [FixHive] Plugin loaded
 [FixHive] Project: /your/project/path
 [FixHive] Cloud: enabled
-[FixHive] Ready - use fixhive_stats to verify
+[FixHive] Device: abc12345...
+[FixHive] Ready - use fixhive_search_cases to find solutions
 ```
 
 ## How It Works
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        FixHive Flow                             │
+│                    FixHive Flow (v2.0)                          │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │   1. Error Occurs                                               │
 │      ↓                                                          │
-│   2. Auto Detection (tool.execute.after hook)                   │
+│   2. AI Normalizes Error Signature                              │
 │      ↓                                                          │
-│   3. Privacy Filter (redact API keys, paths, etc.)              │
+│   3. Cloud Search (Supabase + pgvector)                         │
 │      ↓                                                          │
-│   4. Local Storage (SQLite)                                     │
+│   4. Environment Matching (language, framework, packages)       │
 │      ↓                                                          │
-│   5. Cloud Search (Supabase + pgvector)                         │
+│   5. Display Ranked Solutions (similarity + votes)              │
 │      ↓                                                          │
-│   6. Display Solutions (ranked by similarity & votes)           │
-│      ↓                                                          │
-│   7. Resolution → Upload to Community                           │
+│   6. Resolution → Upload to Community                           │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -111,130 +131,96 @@ Environment variables to customize behavior:
 # Use your own Supabase instance instead of community
 FIXHIVE_SUPABASE_URL=https://your-project.supabase.co
 FIXHIVE_SUPABASE_KEY=your-anon-key
-
-# Enable semantic search (recommended)
-OPENAI_API_KEY=sk-...
-
-# Custom contributor ID (auto-generated if not set)
-FIXHIVE_CONTRIBUTOR_ID=your-contributor-id
 ```
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `FIXHIVE_SUPABASE_URL` | Community DB | Your Supabase project URL |
 | `FIXHIVE_SUPABASE_KEY` | Community Key | Your Supabase anon key |
-| `OPENAI_API_KEY` | None | Enables semantic similarity search |
-| `FIXHIVE_CONTRIBUTOR_ID` | Auto-generated | Your unique contributor ID |
 
 ## Available Tools
 
-### `fixhive_search`
+### `fixhive_search_cases`
 
 Search the knowledge base for error solutions.
 
 ```typescript
 // Arguments
 {
-  errorMessage: string;   // Required: The error message to search for
-  language?: string;      // Optional: Programming language (typescript, python, etc.)
-  framework?: string;     // Optional: Framework (react, nextjs, express, etc.)
-  limit?: number;         // Optional: Maximum results (default: 5)
+  error_message: string;     // Required: The error message to search for
+  error_signature?: string;  // Optional: Normalized signature with placeholders
+  language?: string;         // Optional: Programming language (typescript, python, etc.)
+  framework?: string;        // Optional: Framework (react, nextjs, express, etc.)
+  packages?: object;         // Optional: Key dependencies with versions
+  limit?: number;            // Optional: Maximum results (default: 5)
 }
 ```
 
 **Example:**
 ```
-fixhive_search "Cannot find module 'react'" --language typescript --framework nextjs
+fixhive_search_cases error_message="Cannot find module 'react'" language="typescript" framework="nextjs"
 ```
 
-### `fixhive_resolve`
+### `fixhive_report_resolution`
 
-Mark an error as resolved and share the solution.
+Report an error resolution to the community.
 
 ```typescript
 // Arguments
 {
-  errorId: string;        // Required: Error ID from fixhive_list
-  resolution: string;     // Required: Description of how the error was resolved
-  resolutionCode?: string; // Optional: Code fix or diff
-  upload?: boolean;       // Optional: Upload to community (default: true)
+  error_message: string;      // Required: Original error message
+  error_signature: string;    // Required: Normalized signature
+  solution?: string;          // Optional: How the error was resolved
+  cause?: string;             // Optional: Root cause of the error
+  solution_steps?: string[];  // Optional: Step-by-step resolution
+  code_diff?: string;         // Optional: Code changes that fixed the issue
+  language?: string;          // Optional: Programming language
+  framework?: string;         // Optional: Framework
+  packages?: object;          // Optional: Key dependencies
+  used_variant_id?: string;   // Optional: If existing solution helped
 }
 ```
 
 **Example:**
 ```
-fixhive_resolve abc12345 "Missing dependency. Fixed by running npm install react"
-```
-
-### `fixhive_list`
-
-List errors detected in the current session.
-
-```typescript
-// Arguments
-{
-  status?: 'unresolved' | 'resolved' | 'uploaded';  // Optional: Filter by status
-  limit?: number;                                    // Optional: Maximum results (default: 10)
-}
+fixhive_report_resolution error_message="Cannot find module 'react'" error_signature="Cannot find module '{module}'" solution="Added dependency to package.json"
 ```
 
 ### `fixhive_vote`
 
-Upvote or downvote a solution.
+Vote on a solution's quality.
 
 ```typescript
 // Arguments
 {
-  knowledgeId: string;  // Required: Knowledge entry ID
-  helpful: boolean;     // Required: true for upvote, false for downvote
+  variant_id: string;  // Required: The variant ID to vote on
+  value: 'up' | 'down' | 'report';  // Required: Vote type
+  reason?: string;     // Required when reporting: Explain why
 }
 ```
 
-### `fixhive_stats`
-
-View usage statistics.
-
-```typescript
-// No arguments required
+**Example:**
+```
+fixhive_vote variant_id="abc123" value="up"
 ```
 
-**Output:**
-```markdown
-## FixHive Statistics
+## Error Signature Normalization
 
-### Local
-- Errors recorded: 42
-- Resolved: 38
-- Uploaded: 25
+When searching or reporting errors, normalize the message by replacing variable parts with placeholders:
 
-### Community Contributions
-- Solutions shared: 25
-- Times your solutions helped: 156
-- Total upvotes received: 89
-```
+| Target | Placeholder | Example |
+|--------|-------------|---------|
+| Class names | `{class}` | `UserController` → `{class}` |
+| File names | `{file}` | `index.ts:42` → `{file}:{id}` |
+| Numeric IDs | `{id}` | `user_id: 12345` → `user_id: {id}` |
+| UUIDs | `{uuid}` | `550e8400-e29b-...` → `{uuid}` |
+| Timestamps | `{timestamp}` | `2024-01-15T10:30:00Z` → `{timestamp}` |
+| File paths | `{path}` | `/home/user/project/` → `{path}` |
+| DB identifiers | `{table}.{column}` | `users.email` → `{table}.{column}` |
+| Routes | `{route}` | `/api/users/123` → `{route}` |
+| Views | `{view}` | `admin.users.index` → `{view}` |
 
-### `fixhive_helpful`
-
-Report that a solution was helpful.
-
-```typescript
-// Arguments
-{
-  knowledgeId: string;  // Required: Knowledge entry ID that helped
-}
-```
-
-### `fixhive_report`
-
-Report inappropriate content.
-
-```typescript
-// Arguments
-{
-  knowledgeId: string;  // Required: Knowledge entry ID to report
-  reason?: string;      // Optional: Reason for reporting
-}
-```
+**Keep unchanged**: Framework classes, error codes (`SQLSTATE`, `TypeError`), package names
 
 ## Example Workflow
 
@@ -243,19 +229,16 @@ Report inappropriate content.
    $ npm run build
    > error TS2307: Cannot find module '@/components/Button'
 
-2. FixHive automatically:
-   - Detects the error
-   - Records it locally
-   - Searches for solutions
-   - Displays matching community solutions
+2. Search for solutions
+   fixhive_search_cases error_message="error TS2307: Cannot find module '@/components/Button'" error_signature="error TS2307: Cannot find module '{path}'" language="typescript" framework="nextjs"
 
-3. Apply the fix from community solution
-   $ npm install @/components/Button --save
+3. Apply the top-ranked solution
 
-4. Mark as resolved and share
-   fixhive_resolve <error-id> "Missing alias configuration in tsconfig.json. Added paths mapping."
+4. Report your resolution
+   fixhive_report_resolution error_message="..." error_signature="error TS2307: Cannot find module '{path}'" solution="Added path alias in tsconfig.json"
 
-5. Your solution helps other developers!
+5. Vote on solutions that helped
+   fixhive_vote variant_id="abc123" value="up"
 ```
 
 ## Privacy
@@ -267,7 +250,7 @@ FixHive automatically filters sensitive information before sharing:
 | API Keys | `sk-abc123...`, `ghp_xxx...` | `[API_KEY_REDACTED]` |
 | Tokens | `Bearer eyJ...`, `xoxb-...` | `[TOKEN_REDACTED]` |
 | Emails | `user@example.com` | `[EMAIL_REDACTED]` |
-| Paths | `/Users/john/projects/...` | `~/projects/...` |
+| Paths | `/Users/john/projects/...` | `[PATH_REDACTED]` |
 | Env Vars | `DATABASE_URL=postgres://...` | `[ENV_REDACTED]` |
 | Connection Strings | `mongodb://user:pass@...` | `[CONNECTION_STRING_REDACTED]` |
 | IP Addresses | `192.168.1.100` | `[IP_REDACTED]` |
@@ -290,7 +273,7 @@ CREATE EXTENSION IF NOT EXISTS vector;
 
 ### 3. Run Setup Script
 
-Copy and run the contents of `scripts/setup-supabase.sql` in the SQL Editor.
+Copy and run the contents of `scripts/setup-codecasedb-v2.sql` in the SQL Editor.
 
 ### 4. Configure Environment
 
@@ -305,216 +288,34 @@ FIXHIVE_SUPABASE_KEY=your-anon-key
 ```
 @the-magic-tower/fixhive-opencode-plugin
 ├── src/
-│   ├── plugin/
-│   │   ├── index.ts          # Plugin definition (hooks)
-│   │   └── tools.ts          # Custom tools (7 tools)
-│   ├── core/
-│   │   ├── error-detector.ts # Multi-signal error detection
-│   │   ├── privacy-filter.ts # Sensitive data redaction
-│   │   └── hash.ts           # Fingerprinting & deduplication
-│   ├── storage/
-│   │   ├── local-store.ts    # SQLite local storage (Bun/Node.js)
-│   │   └── migrations.ts     # Database migrations
-│   ├── cloud/
-│   │   ├── client.ts         # Supabase client
-│   │   └── embedding.ts      # OpenAI embeddings
-│   └── types/
-│       ├── index.ts          # TypeScript definitions
-│       └── bun-sqlite.d.ts   # Bun SQLite type declarations
-└── scripts/
-    └── setup-supabase.sql    # Cloud schema
+│   ├── index.ts              # Main exports
+│   └── plugin/
+│       ├── index.ts          # Plugin definition (hooks)
+│       └── tools.ts          # Custom tools (3 tools)
+│
+└── Shared Package (@the-magic-tower/fixhive-shared)
+    ├── types/                # CaseGroup, CaseVariant, Resolution, Vote
+    ├── device/               # device_id management
+    ├── cloud/                # Supabase client, ranking algorithm
+    └── utils/                # hash, privacy filtering
 ```
 
-### Runtime Compatibility
+## Device Identification
 
-FixHive automatically detects the runtime environment and uses the appropriate SQLite implementation:
+FixHive uses a persistent device ID stored in `~/.codecasedb/device_id`. This ID:
+- Is automatically generated on first use (UUID v4)
+- Persists across sessions and projects
+- Does not contain any personal information
+- Used for vote deduplication and contribution tracking
 
-| Runtime | SQLite Implementation |
-|---------|----------------------|
-| Bun     | `bun:sqlite` (native) |
-| Node.js | `better-sqlite3`     |
+## Ranking Algorithm
 
-## API Reference
+Solutions are ranked using:
 
-### TypeScript Types
-
-```typescript
-import type {
-  LocalErrorRecord,
-  CloudKnowledgeEntry,
-  ErrorType,
-  ErrorStatus,
-  Language,
-  Severity,
-} from '@the-magic-tower/fixhive-opencode-plugin';
-
-// Error types
-type ErrorType =
-  | 'runtime' | 'build' | 'lint' | 'test'
-  | 'network' | 'permission' | 'dependency'
-  | 'syntax' | 'type_error' | 'unknown';
-
-// Error status
-type ErrorStatus = 'unresolved' | 'resolved' | 'uploaded';
-
-// Supported languages
-type Language =
-  | 'typescript' | 'javascript' | 'python' | 'rust'
-  | 'go' | 'java' | 'ruby' | 'php' | 'csharp' | 'cpp' | 'other';
 ```
+final_score = env_match × 0.4 + success_rate × 0.3 + vote_score × 0.2 + report_factor × 0.1
 
-### Programmatic Usage
-
-```typescript
-import {
-  ErrorDetector,
-  PrivacyFilter,
-  LocalStore,
-  CloudClient,
-  createEmbeddingService,
-} from '@the-magic-tower/fixhive-opencode-plugin';
-
-// Create instances
-const detector = new ErrorDetector();
-const filter = new PrivacyFilter();
-const store = new LocalStore('/path/to/project');
-const cloud = new CloudClient({
-  supabaseUrl: 'https://xxx.supabase.co',
-  supabaseAnonKey: 'your-key',
-});
-
-// Detect errors
-const result = detector.detect({
-  tool: 'bash',
-  output: 'error TS2307: Cannot find module...',
-  exitCode: 1,
-});
-
-// Sanitize content
-const sanitized = filter.sanitize('API key: sk-abc123...');
-// { sanitized: 'API key: [API_KEY_REDACTED]', redactedCount: 1, ... }
-
-// Search solutions
-const solutions = await cloud.searchSimilar({
-  errorMessage: 'Module not found',
-  language: 'typescript',
-});
-```
-
-## Troubleshooting
-
-### Upgrade Plugin Version
-
-If you're experiencing issues with an older version of FixHive, follow these steps to upgrade:
-
-#### 1. Check Current Version
-
-Run OpenCode and check the startup logs:
-```bash
-opencode
-```
-
-Look for:
-```
-[FixHive] Plugin loaded
-```
-
-#### 2. Clear OpenCode Cache
-
-Remove the cached plugin files and reinstall:
-
-```bash
-# Method 1: Clear FixHive cache only
-rm -rf ~/.cache/opencode/node_modules/@the-magic-tower*
-
-# Method 2: Clear entire OpenCode cache (if above doesn't work)
-rm -rf ~/.cache/opencode/node_modules/
-```
-
-#### 3. Reinstall Plugin
-
-Navigate to your project directory and reinstall:
-
-```bash
-cd /your/project/path
-npm install @the-magic-tower/fixhive-opencode-plugin@latest
-```
-
-#### 4. Restart OpenCode
-
-```bash
-opencode
-```
-
-You should see updated logs with the latest version:
-```
-[FixHive] Plugin loaded
-[FixHive] Project: /your/project/path
-[FixHive] Cloud: enabled
-[FixHive] Ready - use fixhive_stats to verify
-```
-
-#### 5. Verify Installation
-
-Run the stats command to verify:
-```typescript
-fixhive_stats
-```
-
-This will show you the current local statistics. If you're using the cloud features, check that the connection is working properly.
-
-### Verify Plugin is Working
-
-When the plugin loads successfully, you'll see:
-```
-[FixHive] Plugin loaded
-[FixHive] Project: /your/project/path
-[FixHive] Cloud: enabled
-[FixHive] Detected: typescript
-[FixHive] Ready - use fixhive_stats to verify
-```
-
-All 7 tools should be available:
-- `fixhive_search`, `fixhive_resolve`, `fixhive_list`, `fixhive_vote`, `fixhive_report`, `fixhive_stats`, `fixhive_helpful`
-
-### Plugin not loading
-
-Make sure you're using OpenCode v1.1.1 or later:
-```bash
-npm list @opencode-ai/plugin
-```
-
-If you have an old cached version, clear the cache and restart:
-```bash
-rm -rf ~/.cache/opencode/node_modules/@the-magic-tower*
-opencode
-```
-
-### No solutions found
-
-1. Check if you have `OPENAI_API_KEY` set for semantic search
-2. Try broader search terms
-3. The community database may not have solutions for rare errors yet
-
-### Privacy concerns
-
-FixHive automatically filters sensitive data, but you can disable cloud sync:
-```typescript
-fixhive_resolve <error-id> "My resolution" --upload false
-```
-
-### SQLite errors
-
-Clear local database:
-```bash
-rm -rf .fixhive/
-```
-
-### Connection errors
-
-Check your network and Supabase status:
-```bash
-curl https://your-project.supabase.co/rest/v1/
+env_match = language_match × 0.4 + framework_match × 0.4 + packages_overlap × 0.2
 ```
 
 ## Development
@@ -523,7 +324,7 @@ curl https://your-project.supabase.co/rest/v1/
 # Install dependencies
 npm install
 
-# Build
+# Build (requires Bun)
 npm run build
 
 # Watch mode
@@ -538,14 +339,6 @@ npm test
 # Run tests with coverage
 npm run test:coverage
 ```
-
-### Test Coverage
-
-| Module | Coverage |
-|--------|----------|
-| Core (error-detector, privacy-filter, hash) | 99% |
-| Storage (local-store) | 98% |
-| Cloud (client, embedding) | 96% |
 
 ## Contributing
 
@@ -570,10 +363,13 @@ See [CHANGELOG.md](CHANGELOG.md) for release history.
 
 MIT - see [LICENSE](LICENSE) for details.
 
+## Related Packages
+
+- [@the-magic-tower/fixhive-shared](https://github.com/TheMagicTower/fixhive-shared) - Shared utilities
+- [@the-magic-tower/fixhive-claude-code](https://github.com/TheMagicTower/FixHive-ClaudeCode) - Claude Code MCP server
+
 ## Acknowledgments
 
 - [OpenCode](https://github.com/opencode-ai/opencode) - AI coding assistant
 - [Supabase](https://supabase.com) - Backend as a Service
 - [pgvector](https://github.com/pgvector/pgvector) - Vector similarity search
-- [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) - Fast SQLite bindings (Node.js)
-- [Bun](https://bun.sh) - Fast JavaScript runtime with native SQLite support

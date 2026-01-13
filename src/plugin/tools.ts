@@ -1,167 +1,245 @@
 /**
- * FixHive Custom Tools
+ * FixHive Custom Tools - CodeCaseDB v2.0
+ *
  * OpenCode plugin tools for error knowledge management
+ * 3 core tools: search_cases, report_resolution, vote
  */
 
 import { tool } from '@opencode-ai/plugin';
-import type { LocalStore } from '../storage/local-store.js';
-import type { CloudClient } from '../cloud/client.js';
-import type { PrivacyFilter } from '../core/privacy-filter.js';
-import type { FixHiveContext, CloudKnowledgeEntry, LocalErrorRecord } from '../types/index.js';
+import {
+  hashSignature,
+  filterSensitiveData,
+  sanitizeStackTrace,
+  NORMALIZATION_GUIDE,
+} from '@the-magic-tower/fixhive-shared';
+import type { Environment, CloudClient } from '@the-magic-tower/fixhive-shared';
+
+interface FixHiveContext {
+  sessionId: string;
+  projectDirectory: string;
+  language?: string;
+  framework?: string;
+  packages?: Record<string, string>;
+}
 
 /**
  * Create FixHive tools for OpenCode plugin
- * @returns Record of tool definitions
  */
 export function createTools(
-  localStore: LocalStore,
   cloudClient: CloudClient,
-  privacyFilter: PrivacyFilter,
   context: FixHiveContext
 ): Record<string, ReturnType<typeof tool>> {
   return {
     /**
      * Search cloud knowledge base for error solutions
      */
-    fixhive_search: tool({
-      description:
-        'Search FixHive knowledge base for error solutions. Use when encountering errors to find community solutions.',
+    fixhive_search_cases: tool({
+      description: `Search FixHive knowledge base for error solutions.
+
+IMPORTANT: Before calling this tool, normalize the error message:
+${NORMALIZATION_GUIDE}
+
+Returns ranked solutions based on similarity, environment match, and community votes.`,
       args: {
-        errorMessage: tool.schema.string().describe('The error message to search for'),
+        error_message: tool.schema.string().describe('The original error message'),
+        error_signature: tool.schema
+          .string()
+          .optional()
+          .describe('Normalized error signature (with placeholders like {class}, {file}, {id})'),
         language: tool.schema
           .string()
           .optional()
-          .describe('Programming language (typescript, python, etc.)'),
+          .describe('Programming language (typescript, python, php, etc.)'),
         framework: tool.schema
           .string()
           .optional()
-          .describe('Framework (react, nextjs, express, etc.)'),
+          .describe('Framework (react, nextjs, laravel, django, etc.)'),
+        packages: tool.schema
+          .object({})
+          .optional()
+          .describe('Key dependencies with versions'),
         limit: tool.schema.number().optional().describe('Maximum results (default: 5)'),
       },
       async execute(args, ctx) {
         context.sessionId = ctx.sessionID;
 
-        // Check local cache first
-        const sanitized = privacyFilter.sanitize(args.errorMessage);
-        const cachedResults = localStore.getCachedResults(sanitized.sanitized);
+        const environment: Environment = {
+          language: args.language || context.language || 'unknown',
+          framework: args.framework || context.framework,
+          packages: args.packages || context.packages,
+        };
 
-        if (cachedResults && cachedResults.length > 0) {
-          return formatSearchResults(cachedResults, true);
+        const signatureHash = args.error_signature
+          ? hashSignature(args.error_signature)
+          : undefined;
+
+        try {
+          const result = await cloudClient.searchCases({
+            error_message: args.error_message,
+            error_signature: args.error_signature,
+            environment,
+            signature_hash: signatureHash,
+            limit: args.limit || 5,
+          });
+
+          if (!result.group || result.variants.length === 0) {
+            return JSON.stringify({
+              found: false,
+              message: 'No similar errors found in the knowledge base.',
+              suggestions: [
+                'Try normalizing the error message with placeholders',
+                'Check if the error message is complete',
+                'After resolving, use fixhive_report_resolution to contribute',
+              ],
+            });
+          }
+
+          return JSON.stringify({
+            found: true,
+            result: {
+              groupId: result.group.id,
+              errorSignature: result.group.error_signature,
+              totalReports: result.group.total_reports,
+              variantCount: result.variants.length,
+              solutions: result.variants.map((v) => ({
+                rank: v.rank,
+                variantId: v.id,
+                solution: v.solution,
+                cause: v.cause,
+                matchScore: Math.round(v.environment_match * 100) + '%',
+                matchReason: v.match_reason,
+                successRate: Math.round(v.success_rate * 100) + '%',
+                votes: v.score,
+                solutionSteps: v.solution_steps,
+              })),
+            },
+            hint: 'Use fixhive_report_resolution to report whether a solution worked, or fixhive_vote to upvote/downvote.',
+          });
+        } catch (error) {
+          return JSON.stringify({
+            found: false,
+            error: error instanceof Error ? error.message : 'Search failed',
+          });
         }
-
-        // Search cloud
-        const results = await cloudClient.searchSimilar({
-          errorMessage: sanitized.sanitized,
-          language: args.language as LocalErrorRecord['language'],
-          framework: args.framework,
-          limit: args.limit || 5,
-        });
-
-        if (results.results.length === 0) {
-          return 'No matching solutions found in FixHive knowledge base.';
-        }
-
-        // Cache results
-        localStore.cacheResults(sanitized.sanitized, results.results);
-
-        return formatSearchResults(results.results, false);
       },
     }),
 
     /**
-     * Mark error as resolved and optionally upload solution
+     * Report an error resolution
      */
-    fixhive_resolve: tool({
-      description:
-        'Mark an error as resolved and optionally share the solution with the community.',
+    fixhive_report_resolution: tool({
+      description: `Report an error resolution to the FixHive community knowledge base.
+
+Use this tool after resolving an error to share your solution, or to confirm that an existing solution worked.
+
+IMPORTANT: Before calling this tool, normalize the error signature:
+${NORMALIZATION_GUIDE}`,
       args: {
-        errorId: tool.schema.string().describe('Error ID from fixhive_list'),
-        resolution: tool.schema
+        error_message: tool.schema.string().describe('The original error message'),
+        error_signature: tool.schema
           .string()
-          .describe('Description of how the error was resolved'),
-        resolutionCode: tool.schema
+          .describe('Normalized error signature (with placeholders)'),
+        stack_trace: tool.schema
           .string()
           .optional()
-          .describe('Code fix or diff that resolved the error'),
-        upload: tool.schema
+          .describe('Stack trace (sensitive paths will be sanitized)'),
+        cause: tool.schema.string().optional().describe('Root cause of the error'),
+        solution: tool.schema.string().optional().describe('How the error was resolved'),
+        solution_steps: tool.schema
+          .array(tool.schema.string())
+          .optional()
+          .describe('Step-by-step resolution instructions'),
+        code_diff: tool.schema
+          .string()
+          .optional()
+          .describe('Code changes that fixed the issue'),
+        language: tool.schema.string().optional().describe('Programming language'),
+        framework: tool.schema.string().optional().describe('Framework'),
+        packages: tool.schema.object({}).optional().describe('Key dependencies with versions'),
+        solved: tool.schema
           .boolean()
           .optional()
-          .describe('Upload solution to community (default: true)'),
-      },
-      async execute(args, ctx) {
-        context.sessionId = ctx.sessionID;
-
-        // Update local record
-        const record = localStore.markResolved(args.errorId, {
-          resolution: args.resolution,
-          resolutionCode: args.resolutionCode,
-        });
-
-        if (!record) {
-          console.warn(`[FixHive] markResolved: Error with ID ${args.errorId} not found`);
-          return `Error with ID ${args.errorId} not found.`;
-        }
-
-        console.log(`[FixHive] Error marked as resolved locally: ${args.errorId.slice(0, 8)}`);
-
-        // Upload to cloud if requested
-        if (args.upload !== false) {
-          console.log(`[FixHive] Starting cloud upload for error: ${args.errorId.slice(0, 8)}`);
-          const uploadResult = await cloudClient.uploadResolution({
-            errorRecord: record,
-            resolution: args.resolution,
-            resolutionCode: args.resolutionCode,
-          });
-
-          console.log(`[FixHive] Upload result:`, {
-            success: uploadResult.success,
-            isDuplicate: uploadResult.isDuplicate,
-            knowledgeId: uploadResult.knowledgeId,
-            message: uploadResult.message,
-          });
-
-          if (uploadResult.isDuplicate) {
-            return `Error resolved locally. Similar solution already exists in FixHive (ID: ${uploadResult.existingId}).`;
-          }
-
-          if (uploadResult.success && uploadResult.knowledgeId) {
-            localStore.markUploaded(args.errorId, uploadResult.knowledgeId);
-            console.log(`[FixHive] Local status updated to 'uploaded' for: ${args.errorId.slice(0, 8)}`);
-            return `Error resolved and shared with FixHive community! Knowledge ID: ${uploadResult.knowledgeId}`;
-          }
-
-          return `Error resolved locally. Upload failed: ${uploadResult.message}`;
-        }
-
-        return 'Error marked as resolved locally.';
-      },
-    }),
-
-    /**
-     * List errors in current session
-     */
-    fixhive_list: tool({
-      description: 'List errors detected in the current session.',
-      args: {
-        status: tool.schema
-          .enum(['unresolved', 'resolved', 'uploaded'])
+          .describe('Whether the error was successfully resolved (default: true)'),
+        used_variant_id: tool.schema
+          .string()
           .optional()
-          .describe('Filter by status'),
-        limit: tool.schema.number().optional().describe('Maximum results (default: 10)'),
+          .describe('If an existing solution helped, provide its variant ID'),
+        what_was_tried: tool.schema
+          .string()
+          .optional()
+          .describe('What approaches were tried (useful even if not solved)'),
+        time_spent: tool.schema.number().optional().describe('Minutes spent resolving'),
       },
       async execute(args, ctx) {
         context.sessionId = ctx.sessionID;
 
-        const errors = localStore.getSessionErrors(ctx.sessionID, {
-          status: args.status as LocalErrorRecord['status'],
-          limit: args.limit || 10,
-        });
+        // Filter sensitive data
+        const filteredSolution = args.solution
+          ? filterSensitiveData(args.solution)
+          : undefined;
+        const filteredCause = args.cause ? filterSensitiveData(args.cause) : undefined;
+        const sanitizedStackTrace = args.stack_trace
+          ? sanitizeStackTrace(args.stack_trace)
+          : undefined;
+        const filteredDiff = args.code_diff
+          ? filterSensitiveData(args.code_diff)
+          : undefined;
 
-        if (errors.length === 0) {
-          return 'No errors recorded in this session.';
+        const environment: Environment = {
+          language: args.language || context.language || 'unknown',
+          framework: args.framework || context.framework,
+          packages: args.packages || context.packages,
+        };
+
+        try {
+          const result = await cloudClient.reportResolution({
+            error_message: args.error_message,
+            error_signature: args.error_signature,
+            stack_trace: sanitizedStackTrace,
+            cause: filteredCause?.filtered,
+            solution: filteredSolution?.filtered,
+            solution_steps: args.solution_steps,
+            code_diff: filteredDiff?.filtered,
+            environment,
+            solved: args.solved !== false,
+            used_variant_id: args.used_variant_id,
+            what_was_tried: args.what_was_tried,
+            time_spent: args.time_spent,
+          });
+
+          if (!result.success) {
+            return JSON.stringify({
+              success: false,
+              error: result.error || 'Failed to report resolution',
+            });
+          }
+
+          const warnings: string[] = [];
+          if (filteredSolution?.containsSensitive) {
+            warnings.push('Some sensitive data was redacted from the solution');
+          }
+          if (filteredCause?.containsSensitive) {
+            warnings.push('Some sensitive data was redacted from the cause');
+          }
+
+          return JSON.stringify({
+            success: true,
+            message: args.used_variant_id
+              ? 'Thank you! Success count incremented for the existing solution.'
+              : 'Thank you for contributing! Your resolution has been recorded.',
+            resolutionId: result.resolution_id,
+            groupId: result.group_id,
+            variantId: result.variant_id,
+            isNewGroup: result.is_new_group,
+            isNewVariant: result.is_new_variant,
+            warnings: warnings.length > 0 ? warnings : undefined,
+          });
+        } catch (error) {
+          return JSON.stringify({
+            success: false,
+            error: error instanceof Error ? error.message : 'Report failed',
+          });
         }
-
-        return formatErrorList(errors);
       },
     }),
 
@@ -169,166 +247,88 @@ export function createTools(
      * Vote on a solution
      */
     fixhive_vote: tool({
-      description:
-        'Upvote or downvote a FixHive solution based on whether it helped.',
+      description: `Vote on a solution's quality or report inappropriate content.
+
+Use this after trying a solution to help the community identify the best solutions.
+- up: The solution was helpful
+- down: The solution was not helpful or incorrect
+- report: The content is inappropriate, spam, or harmful (requires reason)`,
       args: {
-        knowledgeId: tool.schema.string().describe('Knowledge entry ID'),
-        helpful: tool.schema
-          .boolean()
-          .describe('True for upvote, false for downvote'),
-      },
-      async execute(args) {
-        const result = await cloudClient.vote(args.knowledgeId, args.helpful);
-
-        if (!result.success) {
-          if (result.error === 'Already voted') {
-            return 'You have already voted on this solution.';
-          }
-          return `Vote failed: ${result.error}`;
-        }
-
-        return args.helpful
-          ? 'Thanks for the feedback! Solution upvoted.'
-          : 'Thanks for the feedback! Solution downvoted.';
-      },
-    }),
-
-    /**
-     * Report inappropriate content
-     */
-    fixhive_report: tool({
-      description:
-        'Report a FixHive solution for inappropriate content, spam, or incorrect information.',
-      args: {
-        knowledgeId: tool.schema.string().describe('Knowledge entry ID to report'),
+        variant_id: tool.schema.string().describe('The variant ID to vote on'),
+        value: tool.schema
+          .enum(['up', 'down', 'report'])
+          .describe('Vote type: up (helpful), down (not helpful), or report'),
         reason: tool.schema
           .string()
           .optional()
-          .describe('Reason for reporting (spam, incorrect, inappropriate, etc.)'),
+          .describe('Required when reporting: explain why the content is inappropriate'),
       },
       async execute(args) {
-        const result = await cloudClient.reportEntry(args.knowledgeId, args.reason);
-
-        if (!result.success) {
-          return 'Failed to submit report. Please try again later.';
+        if (args.value === 'report' && !args.reason) {
+          return JSON.stringify({
+            success: false,
+            error: 'Reason is required when reporting content',
+          });
         }
 
-        return 'Report submitted. Thank you for helping keep FixHive clean!';
-      },
-    }),
+        try {
+          const result = await cloudClient.vote({
+            variant_id: args.variant_id,
+            value: args.value,
+            reason: args.reason,
+          });
 
-    /**
-     * Get usage statistics
-     */
-    fixhive_stats: tool({
-      description: 'Get FixHive usage statistics.',
-      args: {},
-      async execute() {
-        const localStats = localStore.getStats();
-        const cloudStats = await cloudClient.getContributorStats();
+          if (!result.success) {
+            return JSON.stringify({
+              success: false,
+              error: result.error || 'Vote failed',
+            });
+          }
 
-        return `
-## FixHive Statistics
+          const messages: Record<string, string> = {
+            up: 'Thank you for your upvote! This helps other developers find useful solutions.',
+            down: 'Thank you for your feedback. This helps improve solution quality.',
+            report: 'Thank you for reporting. Our team will review this content.',
+          };
 
-### Local
-- Errors recorded: ${localStats.totalErrors}
-- Resolved: ${localStats.resolvedErrors}
-- Uploaded: ${localStats.uploadedErrors}
-
-### Community Contributions
-- Solutions shared: ${cloudStats.contributionCount}
-- Times your solutions helped: ${cloudStats.helpedCount}
-- Total upvotes received: ${cloudStats.totalUpvotes}
-`;
-      },
-    }),
-
-    /**
-     * Report that a solution was helpful
-     */
-    fixhive_helpful: tool({
-      description:
-        'Report that a FixHive solution was helpful and resolved your issue.',
-      args: {
-        knowledgeId: tool.schema.string().describe('Knowledge entry ID that helped'),
-      },
-      async execute(args) {
-        await cloudClient.reportHelpful(args.knowledgeId);
-        return 'Thanks! Your feedback helps improve solution rankings.';
+          return JSON.stringify({
+            success: true,
+            message: messages[args.value],
+            voteId: result.vote_id,
+            previousVote: result.previous_vote,
+            currentScore: result.current_score,
+          });
+        } catch (error) {
+          return JSON.stringify({
+            success: false,
+            error: error instanceof Error ? error.message : 'Vote failed',
+          });
+        }
       },
     }),
   };
 }
 
 /**
- * Format search results for display
+ * Create offline-only tools when cloud is not configured
  */
-function formatSearchResults(
-  results: CloudKnowledgeEntry[],
-  cached: boolean
-): string {
-  const header = cached
-    ? `## FixHive Solutions Found (${results.length}) [Cached]`
-    : `## FixHive Solutions Found (${results.length})`;
-
-  const entries = results
-    .map((r, i) => {
-      const similarity = r.similarity
-        ? ` (${Math.round(r.similarity * 100)}% match)`
-        : '';
-
-      let entry = `
-### ${i + 1}. ${r.errorMessage.slice(0, 80)}...${similarity}
-**Language:** ${r.language} | **Framework:** ${r.framework || 'N/A'} | **Upvotes:** ${r.upvotes}
-
-**Resolution:**
-${r.resolutionDescription}
-`;
-
-      if (r.resolutionCode) {
-        entry += `
-**Code Fix:**
-\`\`\`
-${r.resolutionCode}
-\`\`\`
-`;
-      }
-
-      if (r.resolutionSteps?.length) {
-        entry += `
-**Steps:**
-${r.resolutionSteps.map((s, j) => `${j + 1}. ${s}`).join('\n')}
-`;
-      }
-
-      entry += `
-*ID: ${r.id}*
-
----`;
-
-      return entry;
-    })
-    .join('\n');
-
-  return `${header}\n${entries}\n\nUse \`fixhive_vote\` to rate solutions or \`fixhive_helpful\` if a solution resolved your issue.`;
-}
-
-/**
- * Format error list for display
- */
-function formatErrorList(errors: LocalErrorRecord[]): string {
-  const header = `## Session Errors (${errors.length})`;
-
-  const table = `
-| ID | Type | Status | Message |
-|----|------|--------|---------|
-${errors
-  .map(
-    (e) =>
-      `| \`${e.id}\` | ${e.errorType} | ${e.status} | ${e.errorMessage.slice(0, 50)}... |`
-  )
-  .join('\n')}
-`;
-
-  return `${header}\n${table}\n\nUse \`fixhive_resolve <id>\` to mark as resolved and share solutions.`;
+export function createOfflineTools(
+  _context: FixHiveContext
+): Record<string, ReturnType<typeof tool>> {
+  return {
+    fixhive_search_cases: tool({
+      description: 'Search FixHive knowledge base (requires cloud configuration)',
+      args: {
+        error_message: tool.schema.string().describe('The error message'),
+      },
+      async execute() {
+        return JSON.stringify({
+          found: false,
+          message:
+            'Cloud mode is disabled. Set FIXHIVE_SUPABASE_URL and FIXHIVE_SUPABASE_KEY to enable.',
+          offline: true,
+        });
+      },
+    }),
+  };
 }
